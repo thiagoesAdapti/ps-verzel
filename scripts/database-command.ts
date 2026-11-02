@@ -2,7 +2,12 @@ import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config as loadEnv } from "dotenv";
-import { assertDatabaseUrl, confirmActiveDatabase } from "./database-safety.ts";
+import {
+  assertDatabaseUrl,
+  confirmActiveDatabase,
+  DATABASE_NAMES,
+  type DatabaseTarget
+} from "./database-safety.ts";
 
 const projectRoot = resolve(fileURLToPath(new URL("../", import.meta.url)));
 loadEnv({ path: resolve(projectRoot, ".env") });
@@ -15,16 +20,30 @@ const commands: Record<string, string[]> = {
 const args = action ? commands[action] : undefined;
 if (!args) throw new Error("Comando de banco invalido. Use migrate ou seed.");
 
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) throw new Error("DATABASE_URL e obrigatoria para operacoes de banco.");
-assertDatabaseUrl(connectionString, "development");
-const active = await confirmActiveDatabase(connectionString, "development");
+const requestedTarget = process.argv[3] ?? "development";
+if (!(requestedTarget in DATABASE_NAMES)) {
+  throw new Error("Ambiente de banco invalido. Use development, test ou e2e.");
+}
+const target = requestedTarget as DatabaseTarget;
+if (action === "seed" && target !== "development") {
+  throw new Error("O seed principal so pode ser executado no banco de desenvolvimento.");
+}
+
+const variable = target === "development"
+  ? "DATABASE_URL"
+  : target === "test"
+    ? "TEST_DATABASE_URL"
+    : "E2E_DATABASE_URL";
+const connectionString = process.env[variable];
+if (!connectionString) throw new Error(`${variable} e obrigatoria para operacoes de banco.`);
+assertDatabaseUrl(connectionString, target, variable);
+const active = await confirmActiveDatabase(connectionString, target);
 console.log(`[database-preflight] Conexao confirmada: ${active}.`);
 
 const prismaCli = resolve(projectRoot, "node_modules/prisma/build/index.js");
 const child = spawn(process.execPath, [prismaCli, ...args], {
   cwd: projectRoot,
-  env: { ...process.env, DATABASE_URL: connectionString, NODE_ENV: "development" },
+  env: { ...process.env, DATABASE_URL: connectionString, NODE_ENV: target },
   stdio: "inherit",
   shell: false
 });

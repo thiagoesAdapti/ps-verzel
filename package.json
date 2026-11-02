@@ -16,6 +16,7 @@
     "test:integration": "npm run test:integration -w apps/api",
     "db:generate": "prisma generate",
     "db:migrate": "node scripts/database-command.ts migrate",
+    "db:migrate:test": "node scripts/database-command.ts migrate test",
     "db:seed": "node scripts/database-command.ts seed"
   },
   "devDependencies": {
