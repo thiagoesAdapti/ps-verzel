@@ -174,3 +174,20 @@ textarea.input { resize: vertical; }
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; }
   .toast::after { animation: none; }
 }
+
+.auth-page { max-width: 475px; margin: auto; padding: 44px 16px 70px; }
+.auth-wordmark { display: block; text-align: center; margin-bottom: 20px; }
+.auth-title { text-align: center; margin-bottom: 24px; }
+.auth-title h1 { font-size: 28px; }
+.auth-title p { color: #475569; margin-top: 6px; }
+.auth-switch { margin-top: 17px; color: #475569; text-align: center; font-size: 12px; }
+.auth-switch a { color: #0f766e; font-weight: 750; }
+.role-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.role { padding: 13px; text-align: left; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; cursor: pointer; }
+.role strong, .role small { display: block; }
+.role small { margin-top: 2px; color: #64748b; }
+.role.active { border-color: #0f766e; box-shadow: 0 0 0 2px rgba(15,118,110,.12); background: #f4faf8; }
+
+@media (max-width: 540px) {
+  .role-grid { grid-template-columns: 1fr; }
+}
