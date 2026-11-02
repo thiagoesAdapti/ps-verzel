@@ -4,7 +4,7 @@ export type ProcessTestFaultPoint = "settlement.before_commit";
 const armedFaults = new Map<TestFaultPoint, number>();
 
 export function armTestFault(point: TestFaultPoint, times = 1) {
-  if (process.env.NODE_ENV !== "test") throw new Error("InjeÃ§Ã£o de falhas disponÃ­vel somente em testes.");
+  if (process.env.NODE_ENV !== "test") throw new Error("Injeção de falhas disponível somente em testes.");
   armedFaults.set(point, times);
 }
 
@@ -26,4 +26,3 @@ export function hitProcessTestFault(point: ProcessTestFaultPoint) {
   const requestedCode = Number(process.env.TEST_PROCESS_FAULT_EXIT_CODE ?? "86");
   process.exit(Number.isInteger(requestedCode) && requestedCode > 0 ? requestedCode : 86);
 }
-

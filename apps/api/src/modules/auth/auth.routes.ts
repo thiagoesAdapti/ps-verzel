@@ -14,7 +14,7 @@ const userBody = z.object({ name: z.string().trim().min(2).max(120), email: z.em
 authRouter.post("/register", async (req, res) => {
   const input = userBody.parse(req.body);
   const existing = await prisma.user.findUnique({ where: { email: input.email } });
-  if (existing) throw new AppError("EMAIL_ALREADY_EXISTS", 409, "Este e-mail jÃ¡ estÃ¡ cadastrado.");
+  if (existing) throw new AppError("EMAIL_ALREADY_EXISTS", 409, "Este e-mail já está cadastrado.");
   const user = await transaction(async (tx) => {
     const created = await tx.user.create({ data: { id: randomUUID(), name: input.name, email: input.email, passwordHash: await hashPassword(input.password), role: input.role } });
     await tx.wallet.create({ data: { id: randomUUID(), userId: created.id } });
@@ -26,7 +26,7 @@ authRouter.post("/register", async (req, res) => {
 authRouter.post("/login", async (req, res) => {
   const input = z.object({ email: z.email().transform((v) => v.toLowerCase()), password: z.string().min(1) }).parse(req.body);
   const user = await prisma.user.findUnique({ where: { email: input.email } });
-  if (!user || !(await verifyPassword(input.password, user.passwordHash))) throw new AppError("INVALID_CREDENTIALS", 401, "E-mail ou senha invÃ¡lidos.");
+  if (!user || !(await verifyPassword(input.password, user.passwordHash))) throw new AppError("INVALID_CREDENTIALS", 401, "E-mail ou senha inválidos.");
   const raw = randomToken();
   await prisma.session.create({ data: { id: randomUUID(), userId: user.id, tokenHash: sha256(raw), expiresAt: new Date(Date.now() + cookie.maxAge) } });
   res.cookie("auction_sid", raw, cookie).json({ data: { id: user.id, name: user.name, email: user.email, role: user.role } });
@@ -38,4 +38,3 @@ authRouter.post("/logout", requireAuth, async (req, res) => {
 });
 
 authRouter.get("/me", requireAuth, (req, res) => res.json({ data: { id: req.auth!.userId, name: req.auth!.name, email: req.auth!.email, role: req.auth!.role } }));
-
