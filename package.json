@@ -14,6 +14,7 @@
     "start": "npm run start -w apps/api",
     "test": "npm run test -w apps/api && npm run test -w apps/web",
     "test:integration": "npm run test:integration -w apps/api",
+    "test:external:open-library": "node node_modules/tsx/dist/cli.mjs scripts/check-open-library.ts",
     "db:generate": "prisma generate",
     "db:migrate": "node scripts/database-command.ts migrate",
     "db:migrate:test": "node scripts/database-command.ts migrate test",
