@@ -1,0 +1,31 @@
+{
+  "name": "auction-house",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently --raw -k \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"",
+    "build": "npm run db:generate && npm run build -w apps/api && npm run build -w apps/web",
+    "typecheck": "npm run typecheck -w apps/api && npm run typecheck -w apps/web && tsc -p tsconfig.scripts.json",
+    "start": "npm run start -w apps/api",
+    "test": "npm run test -w apps/api && npm run test -w apps/web",
+    "test:integration": "npm run test:integration -w apps/api",
+    "db:generate": "prisma generate"
+  },
+  "devDependencies": {
+    "concurrently": "10.0.6",
+    "dotenv": "18.0.9",
+    "prisma": "7.10.1",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  },
+  "allowScripts": {
+    "@prisma/engines": true,
+    "prisma": true,
+    "esbuild": true
+  }
+}
