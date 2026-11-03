@@ -5,6 +5,7 @@ import { prisma, transaction } from "../../config/database.ts";
 import { requireRole } from "../../middlewares/auth.middleware.ts";
 import { AppError } from "../../shared/errors.ts";
 import { cents, jsonMoney } from "../../shared/money.ts";
+import { emitLot } from "../../realtime/socket.server.ts";
 import { readCatalogToken } from "../catalog/catalog.service.ts";
 import { createLot, serializeLot } from "./lots.service.ts";
 
@@ -148,6 +149,7 @@ lotsRouter.post("/:id/cancel", requireRole("AUCTIONEER"), async (req, res) => {
       data: { status: "CANCELLED", version: { increment: 1 } }
     });
   });
+  emitLot("lot:cancelled", lot.id, { version: lot.version });
   res.json({ data: serializeLot(lot) });
 });
 

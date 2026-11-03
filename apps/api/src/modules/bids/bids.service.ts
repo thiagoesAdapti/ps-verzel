@@ -6,6 +6,7 @@ import { bidHash } from "../audit/audit-crypto.ts";
 import { sha256 } from "../../shared/crypto.ts";
 import { AppError } from "../../shared/errors.ts";
 import { withKeyLock } from "../../shared/locks.ts";
+import { emitLot } from "../../realtime/socket.server.ts";
 import { hitTestFault } from "../../shared/test-faults.ts";
 
 const transactionOptions = {
@@ -257,6 +258,13 @@ export async function placeBid(input: {
           data: { status: "CONFIRMED", responseStatus: 201, responseBody: response }
         });
       });
+      emitLot("bid:accepted", input.lotId, response);
+      if (persisted.extended) {
+        emitLot("lot:extended", input.lotId, {
+          effectiveEndsAt: persisted.lot.effectiveEndsAt.toISOString(),
+          version: persisted.lot.version
+        });
+      }
       return response;
     } catch (error) {
       if (prepared && !databaseCommitted) {
