@@ -84,6 +84,36 @@ export function startApiProcess(
   );
 }
 
+export async function runTsxScript(
+  relativePath: string,
+  overrides: NodeJS.ProcessEnv = {}
+) {
+  const expectedDatabase = "auction_house_entregavel_test";
+  if (new URL(env.databaseUrl).pathname !== `/${expectedDatabase}`) {
+    throw new Error(`Script integrado recusado fora de ${expectedDatabase}.`);
+  }
+  const handle = startNode(
+    [
+      resolve(projectRoot, "node_modules/tsx/dist/cli.mjs"),
+      resolve(projectRoot, relativePath)
+    ],
+    projectRoot,
+    {
+      NODE_ENV: "test",
+      AUDIT_ANCHOR_DIR: "./data/audit/test-anchors",
+      COVER_STORAGE_DIR: "./data/covers/test",
+      ...overrides
+    }
+  );
+  const result = await handle.exited;
+  if (result.code !== 0) {
+    throw new Error(
+      `Script ${relativePath} falhou com codigo ${result.code}.\n${handle.output()}`
+    );
+  }
+  return handle.output();
+}
+
 export async function waitForHttp(
   url: string,
   processHandle?: ManagedProcess,
