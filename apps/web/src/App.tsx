@@ -2,7 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./app/app-layout.tsx";
 import { useAuth, type User } from "./app/auth-provider.tsx";
 import { LoadingState } from "./components/ui/index.tsx";
-import { AuctioneerPage, CreateLotPage, HomePage, LoginPage, RegisterPage, WalletPage } from "./features/pages.tsx";
+import { AuctioneerPage, CreateLotPage, HomePage, LoginPage, RegisterPage, RoomPage, WalletPage } from "./features/pages.tsx";
 
 function PendingScreen({ title }: { title: string }) {
   return (
@@ -27,7 +27,7 @@ export function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/lots/:id" element={<PendingScreen title="Sala de leilao" />} />
+        <Route path="/lots/:id" element={<RoomPage />} />
         <Route path="/lots/:id/audit" element={<PendingScreen title="Auditoria do lote" />} />
         <Route path="/receipts/:token" element={<PendingScreen title="Comprovante publico" />} />
         <Route path="/wallet" element={<Protected role="BIDDER"><WalletPage /></Protected>} />

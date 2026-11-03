@@ -1,12 +1,13 @@
 import { BookOpen, Check, Search, ShieldCheck } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Page } from "../app/app-layout.tsx";
 import { useAuth } from "../app/auth-provider.tsx";
 import { useToast } from "../app/toast-provider.tsx";
-import { Badge, BookCover, conditionLabel, formatAuctionDateTime, LotCard, Metric, MoneyDisplay, money, openLibraryCoverUrl, type Lot } from "../components/domain/index.tsx";
+import { Badge, BookCover, conditionLabel, formatAuctionDateTime, LotCard, lotBidLabel, Metric, MoneyDisplay, money, openLibraryCoverUrl, type Lot } from "../components/domain/index.tsx";
 import { Button, Card, ConfirmationModal, EmptyState, ErrorState, FormField, Input, LoadingState, MoneyInput, Pagination, Select, StatusMessage, Textarea } from "../components/ui/index.tsx";
-import { api, apiPage, idempotencyKey } from "../services/api.ts";
+import { api, ApiError, apiPage, idempotencyKey } from "../services/api.ts";
+import { socket } from "../services/socket.ts";
 
 function useData<T>(load: () => Promise<T>, deps: unknown[] = []) {
   const [data, setData] = useState<T | null>(null);
@@ -107,7 +108,258 @@ function AuthPage({ register = false }: { register?: boolean }) {
 }
 export const LoginPage = () => <AuthPage />; export const RegisterPage = () => <AuthPage register />;
 
+type Bid = {
+  sequence: number;
+  participant: string;
+  amountCents: string;
+  acceptedAt: string;
+  hash: string;
+};
 type WalletData = { totalCents: string; reservedCents: string; availableCents: string };
+
+export function bidCountLabel(count: number) {
+  return `${count} ${count === 1 ? "lance registrado" : "lances registrados"}`;
+}
+
+export function minimumBidLabel(isLeading: boolean | undefined) {
+  return isLeading ? "Proximo lance minimo" : "Lance minimo";
+}
+
+export function RoomPage() {
+  const { id = "" } = useParams();
+  const { user } = useAuth();
+  const { showToast } = useToast();
+  const [bidPage, setBidPage] = useState(1);
+  const [amountCents, setAmountCents] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [connected, setConnected] = useState(socket.connected);
+  const lot = useData(() => api<Lot>(`/lots/${id}`), [id]);
+  const bids = useData(
+    () => apiPage<Bid[]>(`/lots/${id}/bids?page=${bidPage}&limit=20`),
+    [id, bidPage]
+  );
+  const wallet = useData<WalletData | null>(
+    () => user?.role === "BIDDER" ? api<WalletData>("/wallet") : Promise.resolve(null),
+    [user?.role]
+  );
+  const pendingBid = useRef<{ amountCents: string; key: string } | null>(null);
+
+  useEffect(() => {
+    const sync = () => {
+      void lot.refresh();
+      void bids.refresh();
+      if (user?.role === "BIDDER") void wallet.refresh();
+    };
+    const onConnect = () => {
+      setConnected(true);
+      socket.emit("lot:join", { lotId: id });
+      sync();
+    };
+    const onDisconnect = () => setConnected(false);
+    socket
+      .on("bid:accepted", sync)
+      .on("lot:extended", sync)
+      .on("lot:ended", sync)
+      .on("lot:started", sync)
+      .on("lot:cancelled", sync)
+      .on("connect", onConnect)
+      .on("disconnect", onDisconnect);
+    socket.connect();
+    if (socket.connected) onConnect();
+    return () => {
+      if (socket.connected) socket.emit("lot:leave", { lotId: id });
+      socket
+        .off("bid:accepted", sync)
+        .off("lot:extended", sync)
+        .off("lot:ended", sync)
+        .off("lot:started", sync)
+        .off("lot:cancelled", sync)
+        .off("connect", onConnect)
+        .off("disconnect", onDisconnect);
+      socket.disconnect();
+    };
+  }, [id, lot.refresh, bids.refresh, wallet.refresh, user?.role]);
+
+  if (lot.error) return <div className="page"><ErrorState message={lot.error} retry={lot.refresh} /></div>;
+  if (!lot.data) return <LoadingState />;
+  const item = lot.data;
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      if (!amountCents) throw new Error("Informe um valor valido.");
+      const operation = pendingBid.current?.amountCents === amountCents
+        ? pendingBid.current
+        : { amountCents, key: idempotencyKey() };
+      pendingBid.current = operation;
+      await api(`/lots/${id}/bids`, {
+        method: "POST",
+        headers: { "Idempotency-Key": operation.key },
+        body: JSON.stringify({ amountCents })
+      });
+      pendingBid.current = null;
+      setAmountCents("");
+      showToast({
+        kind: "success",
+        title: "Lance confirmado",
+        message: "Seu lance foi registrado com sucesso."
+      });
+      await Promise.all([lot.refresh(), wallet.refresh()]);
+      if (bidPage === 1) await bids.refresh();
+      else setBidPage(1);
+    } catch (caught) {
+      const pending = caught instanceof ApiError && caught.code === "AUDIT_PENDING";
+      if (!pending) pendingBid.current = null;
+      showToast({
+        kind: pending ? "warning" : "error",
+        title: pending ? "Lance em verificacao" : "Nao foi possivel registrar o lance",
+        message: pending
+          ? "Estamos verificando o resultado desta operacao."
+          : errorMessage(caught)
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return <Page
+    eyebrow={`Lote ${item.id.slice(0, 8)}`}
+    title={item.title}
+    description={item.authors.join(", ")}
+    actions={<Badge status={item.status} />}
+  >
+    <div className="room-grid">
+      <div className="stack">
+        <Card>
+          <BookCover src={item.coverUrl} title={item.title} className="detail-cover" />
+          <div className="facts">
+            <div><span>Conservacao</span><strong>{conditionLabel(item.condition)}</strong></div>
+            <div><span>Publicacao</span><strong>{item.publicationYear ?? "Nao informada"}</strong></div>
+          </div>
+          <h3>Sobre este exemplar</h3>
+          <p>{item.description}</p>
+        </Card>
+        <Card>
+          <div className="card-heading">
+            <h3>Historico de lances</h3>
+            <Link to={`/lots/${id}/audit`}>Auditar historico -&gt;</Link>
+          </div>
+          {bids.error
+            ? <StatusMessage kind="warning">{bids.error}</StatusMessage>
+            : !bids.data
+              ? <LoadingState />
+              : bids.data.data.length
+                ? <>
+                    <div className="line-list">
+                      {bids.data.data.map((bid) => <div className="line-row" key={bid.sequence}>
+                        <div>
+                          <strong>{bid.participant}</strong>
+                          <small>{new Date(bid.acceptedAt).toLocaleString("pt-BR")}</small>
+                        </div>
+                        <MoneyDisplay value={bid.amountCents} />
+                      </div>)}
+                    </div>
+                    <Pagination
+                      page={bids.data.meta.page}
+                      totalPages={bids.data.meta.totalPages}
+                      total={bids.data.meta.total}
+                      onPageChange={setBidPage}
+                      label="Paginacao do historico de lances"
+                    />
+                  </>
+                : <EmptyState title="Nenhum lance" description="Este lote ainda nao recebeu lances." />}
+        </Card>
+      </div>
+      <aside className="stack room-sidebar">
+        <Card className="bid-panel">
+          <div className="card-heading">
+            <span>{lotBidLabel(item)}</span>
+            {item.status === "LIVE" && <span
+              className={`connection-indicator ${connected ? "connected" : "reconnecting"}`}
+              role="status"
+            >{connected ? "Ao vivo - Conectado" : "Ao vivo - Reconectando..."}</span>}
+          </div>
+          <MoneyDisplay large value={item.currentBidCents ?? item.startingBidCents} />
+          <p>{bidCountLabel(item.bidCount)}</p>
+          {item.position && <p>Sua posicao nesta disputa: <strong>{item.position}o</strong></p>}
+          <Countdown endsAt={item.effectiveEndsAt} serverNow={item.serverNow} status={item.status} />
+          {item.status === "LIVE" && <>
+            <div className="divider" />
+            {user?.role === "BIDDER" && <div className="bid-context" aria-label="Informacoes para o lance">
+              <div><span>{minimumBidLabel(item.isLeading)}</span><MoneyDisplay value={item.nextMinimumCents} /></div>
+              <div>
+                <span>Seu saldo disponivel</span>
+                <strong>{wallet.data
+                  ? <MoneyDisplay value={wallet.data.availableCents} />
+                  : wallet.error ? "Indisponivel" : "Consultando..."}</strong>
+              </div>
+            </div>}
+            {item.auditState !== "READY"
+              ? <StatusMessage kind="info">O lote esta sincronizando com a auditoria.</StatusMessage>
+              : user?.role === "AUCTIONEER"
+                ? <StatusMessage kind="info">Voce esta acompanhando como leiloeiro. Apenas licitantes podem dar lances.</StatusMessage>
+                : user?.role === "BIDDER"
+                  ? item.isLeading
+                    ? <StatusMessage kind="success">Voce esta liderando este leilao.</StatusMessage>
+                    : <form onSubmit={submit}>
+                        <FormField label="Seu lance" htmlFor="bid">
+                          <MoneyInput id="bid" valueCents={amountCents} onValueChange={setAmountCents} required />
+                        </FormField>
+                        <Button className="full" size="lg" loading={busy}>Confirmar lance</Button>
+                      </form>
+                  : <StatusMessage kind="info">Entre ou crie uma conta de licitante para participar.</StatusMessage>}
+          </>}
+        </Card>
+        {user?.role === "BIDDER" && <Card><Link to="/wallet">Abrir minha carteira -&gt;</Link></Card>}
+      </aside>
+    </div>
+  </Page>;
+}
+
+export function serverClockOffset(serverNow: string, localAtSync = Date.now()) {
+  return new Date(serverNow).getTime() - localAtSync;
+}
+
+export function remainingSeconds(endsAt: string, localNow: number, offset: number) {
+  return Math.max(0, Math.floor((new Date(endsAt).getTime() - (localNow + offset)) / 1000));
+}
+
+export function countdownParts(seconds: number) {
+  if (seconds >= 86_400) {
+    return [
+      { value: Math.floor(seconds / 86_400), label: "DIAS" },
+      { value: Math.floor((seconds % 86_400) / 3_600), label: "HORAS" },
+      { value: Math.floor((seconds % 3_600) / 60), label: "MIN" }
+    ];
+  }
+  return [
+    { value: Math.floor(seconds / 3_600), label: "HORAS" },
+    { value: Math.floor((seconds % 3_600) / 60), label: "MIN" },
+    { value: seconds % 60, label: "SEG" }
+  ];
+}
+
+function Countdown({ endsAt, serverNow, status }: { endsAt: string; serverNow: string; status: string }) {
+  const [now, setNow] = useState(Date.now());
+  const offset = useMemo(() => serverClockOffset(serverNow), [serverNow]);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, []);
+  const seconds = remainingSeconds(endsAt, now, offset);
+  if (status === "ENDED") return <p className="ended-label">Este leilao foi encerrado.</p>;
+  if (status === "CANCELLED") return <p className="ended-label">Este lote foi cancelado.</p>;
+  return <div>
+    <span className="count-label">{status === "SCHEDULED" ? "Comeca em" : "Encerra em"}</span>
+    <div className="countdown">
+      {countdownParts(seconds).map(({ value, label }) => <div key={label}>
+        <strong>{String(value).padStart(2, "0")}</strong><span>{label}</span>
+      </div>)}
+    </div>
+  </div>;
+}
+
 type Transaction = {
   id: string;
   type: "DEPOSIT" | "AUCTION_DEBIT" | "AUCTION_CREDIT";
