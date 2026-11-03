@@ -3,11 +3,13 @@ import { createServer } from "node:http";
 import { app } from "./app.ts";
 import { closeDatabase, verifyDatabaseConnection } from "./config/database.ts";
 import { env } from "./config/env.ts";
+import { recoverPendingAudits } from "./modules/audit/audit.service.ts";
 import { log } from "./shared/logger.ts";
 
 await mkdir(env.auditDir, { recursive: true });
 await mkdir(env.coverDir, { recursive: true });
 await verifyDatabaseConnection();
+await recoverPendingAudits();
 
 const server = createServer(app);
 server.listen(env.PORT, "127.0.0.1", () => {
