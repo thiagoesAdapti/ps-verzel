@@ -41,6 +41,35 @@ const createLotBody = z.object({
   }
 });
 
+async function orderedPublicLotIds(
+  status: "SCHEDULED" | "LIVE" | "ENDED" | undefined,
+  page: number,
+  limit: number
+) {
+  const statusFilter = status
+    ? Prisma.sql`status = ${status}::"LotStatus"`
+    : Prisma.sql`status <> 'CANCELLED'::"LotStatus"`;
+  return prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT id
+    FROM lots
+    WHERE audit_state = 'READY'::"AuditOperationalState"
+      AND ${statusFilter}
+    ORDER BY
+      CASE status
+        WHEN 'LIVE'::"LotStatus" THEN 1
+        WHEN 'SCHEDULED'::"LotStatus" THEN 2
+        WHEN 'ENDED'::"LotStatus" THEN 3
+        ELSE 4
+      END ASC,
+      CASE WHEN status = 'LIVE'::"LotStatus" THEN effective_ends_at END ASC,
+      CASE WHEN status = 'SCHEDULED'::"LotStatus" THEN starts_at END ASC,
+      CASE WHEN status = 'ENDED'::"LotStatus" THEN effective_ends_at END DESC,
+      id ASC
+    OFFSET ${(page - 1) * limit}
+    LIMIT ${limit}
+  `);
+}
+
 lotsRouter.post("/", requireRole("AUCTIONEER"), async (req, res) => {
   const body = createLotBody.parse(req.body);
   const serverNow = new Date();
@@ -120,6 +149,58 @@ lotsRouter.post("/:id/cancel", requireRole("AUCTIONEER"), async (req, res) => {
     });
   });
   res.json({ data: serializeLot(lot) });
+});
+
+lotsRouter.get("/", async (req, res) => {
+  const { page, limit } = paging.parse(req.query);
+  const status = z.enum(["SCHEDULED", "LIVE", "ENDED"]).optional().parse(req.query.status);
+  const where = {
+    status: status ? status : { not: "CANCELLED" as const },
+    auditState: "READY" as const
+  };
+  const [orderedIds, total] = await Promise.all([
+    orderedPublicLotIds(status, page, limit),
+    prisma.lot.count({ where })
+  ]);
+  const unorderedRows = orderedIds.length
+    ? await prisma.lot.findMany({ where: { id: { in: orderedIds.map(({ id }) => id) } } })
+    : [];
+  const rows = restoreIdOrder(orderedIds, unorderedRows);
+  res.json({
+    data: rows.map((lot: unknown) => serializeLot(lot)),
+    meta: { page, limit, total, totalPages: Math.ceil(total / limit) }
+  });
+});
+
+lotsRouter.get("/:id", async (req, res) => {
+  const id = z.uuid().parse(req.params.id);
+  const lot = await prisma.lot.findUnique({
+    where: { id },
+    include: { participants: true, currentLeader: true }
+  });
+  const canViewCancelled = Boolean(
+    lot
+    && lot.status === "CANCELLED"
+    && req.auth?.role === "AUCTIONEER"
+    && req.auth.userId === lot.sellerId
+  );
+  if (!lot || (lot.status === "CANCELLED" && !canViewCancelled)) {
+    throw new AppError("RESOURCE_NOT_FOUND", 404, "Lote não encontrado.");
+  }
+  const participant = req.auth
+    ? lot.participants.find((candidate: { userId: string }) => candidate.userId === req.auth!.userId)
+    : null;
+  let position: number | null = null;
+  if (participant) {
+    const ranking = await prisma.bid.groupBy({
+      by: ["bidderId"],
+      where: { lotId: id },
+      _max: { amountCents: true },
+      orderBy: { _max: { amountCents: "desc" } }
+    });
+    position = ranking.findIndex((row: { bidderId: string }) => row.bidderId === req.auth!.userId) + 1;
+  }
+  res.json({ data: serializeLot(lot, participant, position || null) });
 });
 
 export const auctioneerRouter = Router();
