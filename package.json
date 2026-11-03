@@ -14,6 +14,7 @@
     "start": "npm run start -w apps/api",
     "test": "npm run test -w apps/api && npm run test -w apps/web",
     "test:integration": "npm run test:integration -w apps/api",
+    "test:e2e": "node node_modules/tsx/dist/cli.mjs scripts/prepare-e2e.ts && node node_modules/@playwright/test/cli.js test --config apps/web/playwright.config.ts",
     "test:external:open-library": "node node_modules/tsx/dist/cli.mjs scripts/check-open-library.ts",
     "audit:keys": "node node_modules/tsx/dist/cli.mjs scripts/generate-audit-keys.ts",
     "db:generate": "prisma generate",
