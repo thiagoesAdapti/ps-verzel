@@ -1,5 +1,5 @@
 import { BookOpen, Check, Search, ShieldCheck } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { Page } from "../app/app-layout.tsx";
 import { useAuth } from "../app/auth-provider.tsx";
@@ -210,6 +210,92 @@ export function AuctioneerPage() {
   </>;
 }
 
+const auctionTimeZone = "America/Sao_Paulo";
+const auctionDateTimeParts = new Intl.DateTimeFormat("en-CA", {
+  timeZone: auctionTimeZone,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23"
+});
+
+export function dateTimeInAuctionZone(date: Date) {
+  const parts = Object.fromEntries(
+    auctionDateTimeParts.formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value])
+  );
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+export function auctionDateTimeToIso(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+  const desiredUtc = Date.UTC(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    Number(match[4]),
+    Number(match[5])
+  );
+  let guess = desiredUtc;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = Object.fromEntries(
+      auctionDateTimeParts.formatToParts(new Date(guess))
+        .filter((part) => part.type !== "literal")
+        .map((part) => [part.type, part.value])
+    );
+    const renderedUtc = Date.UTC(
+      Number(parts.year),
+      Number(parts.month) - 1,
+      Number(parts.day),
+      Number(parts.hour),
+      Number(parts.minute),
+      Number(parts.second)
+    );
+    guess += desiredUtc - renderedUtc;
+  }
+  const date = new Date(guess);
+  return Number.isNaN(date.getTime()) || dateTimeInAuctionZone(date) !== value
+    ? null
+    : date.toISOString();
+}
+
+export function auctionDateAndTimeToIso(date: string, time: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) && /^\d{2}:\d{2}$/.test(time)
+    ? auctionDateTimeToIso(`${date}T${time}`)
+    : null;
+}
+
+export function validateLotSchedule({
+  startsImmediately,
+  startsAt,
+  endsAt,
+  now = Date.now()
+}: {
+  startsImmediately: boolean;
+  startsAt: string;
+  endsAt: string;
+  now?: number;
+}) {
+  const startIso = startsImmediately ? new Date(now).toISOString() : auctionDateTimeToIso(startsAt);
+  const endIso = auctionDateTimeToIso(endsAt);
+  const startTime = startIso ? new Date(startIso).getTime() : Number.NaN;
+  const endTime = endIso ? new Date(endIso).getTime() : Number.NaN;
+  const startError = !startsImmediately && startsAt && startTime < now
+    ? "Escolha um horário futuro ou use “Iniciar imediatamente”."
+    : undefined;
+  const endError = endsAt && endTime <= now
+    ? "O encerramento deve estar no futuro."
+    : endsAt && startIso && endTime <= startTime
+      ? "O encerramento deve ser posterior ao início."
+      : undefined;
+  return { startIso, endIso, startError, endError, valid: Boolean(startIso && endIso && !startError && !endError) };
+}
+
 type CatalogBook = {
   key: string;
   title: string;
@@ -220,8 +306,12 @@ type CatalogBook = {
   catalogToken: string;
 };
 
+type PublicationState = "IDLE" | "PUBLISHING" | "COMPLETED";
+
 export function CreateLotPage() {
   const { showToast } = useToast();
+  const navigate = useNavigate();
+  const publishingLock = useRef(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<CatalogBook[]>([]);
   const [selected, setSelected] = useState<CatalogBook | null>(null);
@@ -232,6 +322,18 @@ export function CreateLotPage() {
   const [condition, setCondition] = useState<"EXCELLENT" | "GOOD" | "FAIR" | "POOR">("GOOD");
   const [startingCents, setStartingCents] = useState("");
   const [incrementCents, setIncrementCents] = useState("");
+  const [startMode, setStartMode] = useState<"IMMEDIATE" | "SCHEDULED">("IMMEDIATE");
+  const [startDate, setStartDate] = useState("");
+  const [startTime, setStartTime] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [endTime, setEndTime] = useState("");
+  const [validationNow, setValidationNow] = useState(Date.now());
+  const [publicationState, setPublicationState] = useState<PublicationState>("IDLE");
+
+  useEffect(() => {
+    const timer = setInterval(() => setValidationNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const descriptionContentLength = description.trim().length;
   const missingDescriptionCharacters = Math.max(0, 10 - descriptionContentLength);
@@ -247,6 +349,48 @@ export function CreateLotPage() {
     : descriptionAtLimit ? "character-counter-limit" : descriptionContentLength >= 10 ? "character-counter-valid" : "";
   const visibleResults = showAllResults ? results : results.slice(0, 5);
   const selectedCoverUrl = openLibraryCoverUrl(selected?.coverId);
+  const publishing = publicationState === "PUBLISHING";
+  const startsImmediately = startMode === "IMMEDIATE";
+  const startsAt = startDate && startTime ? `${startDate}T${startTime}` : "";
+  const endsAt = endDate && endTime ? `${endDate}T${endTime}` : "";
+  const schedule = validateLotSchedule({ startsImmediately, startsAt, endsAt, now: validationNow });
+  const lotMoneyError = (value: string) => !value
+    ? undefined
+    : BigInt(value) <= 0n
+      ? "Informe um valor maior que zero."
+      : BigInt(value) > 100_000_000n
+        ? "O valor máximo é R$ 1.000.000,00."
+        : undefined;
+  const startingError = lotMoneyError(startingCents);
+  const incrementError = lotMoneyError(incrementCents);
+  const validLotMoney = (value: string) => Boolean(value) && !lotMoneyError(value);
+  const conditionsValid = descriptionContentLength >= 10
+    && validLotMoney(startingCents)
+    && validLotMoney(incrementCents)
+    && schedule.valid;
+  const formValid = Boolean(selected) && conditionsValid;
+  const currentDateTime = dateTimeInAuctionZone(new Date(validationNow));
+  const minimumStartDateTime = dateTimeInAuctionZone(new Date(validationNow + 60_000));
+  const endComparisonDateTime = startsImmediately ? currentDateTime : startsAt;
+  const endComparisonIso = auctionDateTimeToIso(endComparisonDateTime);
+  const minimumEndDateTime = endComparisonIso
+    ? dateTimeInAuctionZone(new Date(Date.parse(endComparisonIso) + 60_000))
+    : minimumStartDateTime;
+  const minimumStartDate = minimumStartDateTime.slice(0, 10);
+  const minimumStartTime = startDate === minimumStartDate ? minimumStartDateTime.slice(11) : undefined;
+  const minimumEndDate = minimumEndDateTime.slice(0, 10);
+  const minimumEndTime = endDate === minimumEndDate ? minimumEndDateTime.slice(11) : undefined;
+  const previewDate = (value: string | null) => value ? formatAuctionDateTime(value) : "—";
+  const publicationStepClass = publicationState === "COMPLETED"
+    ? "done"
+    : publicationState === "PUBLISHING"
+      ? "processing"
+      : formValid ? "active" : "";
+  const publicationStepLabel = publicationState === "COMPLETED"
+    ? "Concluída"
+    : publicationState === "PUBLISHING"
+      ? "Em processamento"
+      : formValid ? "Etapa atual" : null;
 
   const search = async () => {
     if (query.trim().length < 2 || searching) return;
@@ -265,8 +409,63 @@ export function CreateLotPage() {
     }
   };
 
+  const publish = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (publishingLock.current) return;
+    const currentSchedule = validateLotSchedule({ startsImmediately, startsAt, endsAt, now: Date.now() });
+    if (
+      !selected
+      || descriptionContentLength < 10
+      || !validLotMoney(startingCents)
+      || !validLotMoney(incrementCents)
+      || !currentSchedule.valid
+    ) {
+      setValidationNow(Date.now());
+      if (descriptionContentLength < 10) document.getElementById("description")?.focus();
+      showToast({
+        kind: "warning",
+        title: "Revise os dados do lote",
+        message: "Preencha os campos obrigatórios e corrija os horários antes de publicar."
+      });
+      return;
+    }
+    publishingLock.current = true;
+    setPublicationState("PUBLISHING");
+    let completed = false;
+    try {
+      const lot = await api<Lot>("/lots", {
+        method: "POST",
+        body: JSON.stringify({
+          catalogToken: selected.catalogToken,
+          description,
+          condition,
+          startingBidCents: startingCents,
+          minimumIncrementCents: incrementCents,
+          startsImmediately,
+          startsAt: startsImmediately ? undefined : currentSchedule.startIso,
+          endsAt: currentSchedule.endIso
+        })
+      });
+      completed = true;
+      setPublicationState("COMPLETED");
+      showToast({ kind: "success", title: "Lote publicado", message: "O novo lote já está disponível na casa de leilões." });
+      await new Promise((resolve) => setTimeout(resolve, 650));
+      navigate(`/lots/${lot.id}`);
+    } catch (caught) {
+      showToast({ kind: "error", title: "Não foi possível publicar o lote", message: errorMessage(caught) });
+    } finally {
+      publishingLock.current = false;
+      if (!completed) setPublicationState("IDLE");
+    }
+  };
+
   return <Page eyebrow="Gestão de lotes" title="Criar novo lote" description="Selecione um livro do catálogo e defina as condições do leilão.">
-    <form className="create-grid" onSubmit={(event) => event.preventDefault()}>
+    <div className="steps" aria-label="Progresso da criação do lote">
+      <span className={`step ${selected ? "done" : "active"}`} aria-current={!selected ? "step" : undefined}><span>1 <b>Selecionar livro</b></span><small>{selected ? "Concluída" : "Etapa atual"}</small></span>
+      <span className={`step ${!selected ? "" : conditionsValid ? "done" : "active"}`} aria-current={selected && !conditionsValid ? "step" : undefined}><span>2 <b>Configurar lote</b></span>{selected && <small>{conditionsValid ? "Concluída" : "Etapa atual"}</small>}</span>
+      <span className={`step ${publicationStepClass}`} aria-current={publicationState === "PUBLISHING" || publicationState === "IDLE" && formValid ? "step" : undefined} aria-busy={publishing}><span>3 <b>Publicar</b></span>{publicationStepLabel && <small>{publicationStepLabel}</small>}</span>
+    </div>
+    <form className="create-grid" onSubmit={publish}>
       <div className="stack">
         <Card>
           <div className="card-heading">
@@ -309,9 +508,25 @@ export function CreateLotPage() {
             </Select>
           </FormField>
           <div className="form-grid">
-            <FormField label="Lance inicial" htmlFor="starting"><MoneyInput id="starting" valueCents={startingCents} onValueChange={setStartingCents} required /></FormField>
-            <FormField label="Incremento mínimo" htmlFor="increment"><MoneyInput id="increment" valueCents={incrementCents} onValueChange={setIncrementCents} required /></FormField>
+            <FormField label="Lance inicial" htmlFor="starting" error={startingError}><MoneyInput id="starting" valueCents={startingCents} onValueChange={setStartingCents} aria-invalid={Boolean(startingError)} required /></FormField>
+            <FormField label="Incremento mínimo" htmlFor="increment" error={incrementError}><MoneyInput id="increment" valueCents={incrementCents} onValueChange={setIncrementCents} aria-invalid={Boolean(incrementError)} required /></FormField>
           </div>
+          <fieldset className="start-mode-field">
+            <legend className="required-label">Início do leilão</legend>
+            <div className="start-mode-options">
+              <label className={startsImmediately ? "start-mode-option active" : "start-mode-option"}><input type="radio" name="startMode" value="IMMEDIATE" checked={startsImmediately} onChange={() => setStartMode("IMMEDIATE")} /><span><strong>Ao publicar</strong><small>O leilão começa assim que for publicado.</small></span></label>
+              <label className={!startsImmediately ? "start-mode-option active" : "start-mode-option"}><input type="radio" name="startMode" value="SCHEDULED" checked={!startsImmediately} onChange={() => setStartMode("SCHEDULED")} /><span><strong>Agendar início</strong><small>Escolha uma data e um horário para começar.</small></span></label>
+            </div>
+          </fieldset>
+          {!startsImmediately && <div className="form-grid schedule-fields">
+            <FormField label="Data de início" htmlFor="startDate" required><Input id="startDate" type="date" min={minimumStartDate} value={startDate} onChange={(event) => setStartDate(event.currentTarget.value)} required aria-invalid={Boolean(schedule.startError)} /></FormField>
+            <FormField label="Horário de início" htmlFor="startTime" error={schedule.startError} required><Input id="startTime" type="time" step={60} min={minimumStartTime} value={startTime} onChange={(event) => setStartTime(event.currentTarget.value)} required aria-invalid={Boolean(schedule.startError)} /></FormField>
+          </div>}
+          <div className="form-grid schedule-fields">
+            <FormField label="Data de término" htmlFor="endDate" required><Input id="endDate" type="date" min={minimumEndDate} value={endDate} onChange={(event) => setEndDate(event.currentTarget.value)} required aria-invalid={Boolean(schedule.endError)} /></FormField>
+            <FormField label="Horário de término" htmlFor="endTime" error={schedule.endError} required><Input id="endTime" type="time" step={60} min={minimumEndTime} value={endTime} onChange={(event) => setEndTime(event.currentTarget.value)} required aria-invalid={Boolean(schedule.endError)} /></FormField>
+          </div>
+          <p className="timezone-note">Horário de Brasília.</p>
         </Card>
       </div>
       <aside className="preview-column"><Card className="preview">
@@ -320,8 +535,8 @@ export function CreateLotPage() {
           <BookCover src={selectedCoverUrl} title={selected?.title ?? "Nenhum livro selecionado"} className="preview-cover" />
           <div className="preview-book-copy"><strong>{selected?.title ?? "Selecione um livro"}</strong><span>{selected?.authors.join(", ") ?? "Pesquise e selecione um item para continuar."}</span>{selected && <Badge status={conditionLabel(condition)} />}</div>
         </div>
-        <div className="preview-facts"><div><span>Lance inicial</span><strong>{startingCents ? money(startingCents) : "—"}</strong></div><div><span>Incremento</span><strong>{incrementCents ? money(incrementCents) : "—"}</strong></div></div>
-        <Button className="full" size="lg" disabled>Configure o agendamento</Button>
+        <div className="preview-facts"><div><span>Lance inicial</span><strong>{startingCents ? money(startingCents) : "—"}</strong></div><div><span>Incremento</span><strong>{incrementCents ? money(incrementCents) : "—"}</strong></div><div><span>Início</span><strong>{startsImmediately ? "Imediato" : previewDate(schedule.startIso)}</strong></div><div><span>Encerramento</span><strong>{previewDate(schedule.endIso)}</strong></div></div>
+        <Button className="full" size="lg" loading={publishing} disabled={!formValid || publicationState !== "IDLE"}>{publicationState === "COMPLETED" ? "Lote publicado" : publishing ? "Publicando lote…" : "Publicar lote"}</Button>
       </Card></aside>
     </form>
   </Page>;
