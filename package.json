@@ -22,7 +22,8 @@
     "db:migrate:test": "node scripts/database-command.ts migrate test",
     "db:migrate:production": "node scripts/database-command.ts migrate production",
     "db:seed": "node scripts/database-command.ts seed",
-    "config:secrets": "node scripts/configure-local-secrets.ts"
+    "config:secrets": "node scripts/configure-local-secrets.ts",
+    "config:production-secrets": "node scripts/generate-production-secrets.ts"
   },
   "devDependencies": {
     "concurrently": "10.0.6",

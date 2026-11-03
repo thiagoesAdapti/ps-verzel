@@ -1,0 +1,22 @@
+leilao.figueiredo.tech {
+	encode zstd gzip
+
+	header {
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data: https://covers.openlibrary.org; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+		Permissions-Policy "camera=(), geolocation=(), microphone=()"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	@backend path /api/* /socket.io /socket.io/*
+	handle @backend {
+		reverse_proxy 127.0.0.1:3300
+	}
+
+	handle {
+		root * /srv/leilao/app/apps/web/dist
+		try_files {path} /index.html
+		file_server
+	}
+}
