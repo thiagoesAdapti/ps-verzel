@@ -32,14 +32,16 @@ beforeEach(() => {
 
 describe("web authentication", () => {
   it("restores a session and redirects an incompatible role", async () => {
-    fetchMock.mockResolvedValue(response({ data: {
-      id: "11111111-1111-4111-8111-111111111111",
-      name: "Licitante",
-      email: "bidder@example.com",
-      role: "BIDDER"
-    } }));
+    fetchMock.mockImplementation((url: string) => Promise.resolve(url === "/api/auth/me"
+      ? response({ data: {
+          id: "11111111-1111-4111-8111-111111111111",
+          name: "Licitante",
+          email: "bidder@example.com",
+          role: "BIDDER"
+        } })
+      : response({ data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } })));
     render(<Providers path="/auctioneer" />);
-    expect(await screen.findByRole("heading", { name: "Vitrine de leiloes" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Livros em leilão." })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith("/api/auth/me", expect.objectContaining({ credentials: "include" }));
   });
 
@@ -52,9 +54,13 @@ describe("web authentication", () => {
   it("shows a busy state while login is pending", async () => {
     let resolveLogin!: (value: Response) => void;
     const pending = new Promise<Response>((resolve) => { resolveLogin = resolve; });
-    fetchMock.mockImplementation((url: string) => url === "/api/auth/me"
-      ? Promise.resolve(response({ error: { code: "AUTHENTICATION_REQUIRED", message: "Entre." } }, 401))
-      : pending);
+    fetchMock.mockImplementation((url: string) => {
+      if (url === "/api/auth/me") {
+        return Promise.resolve(response({ error: { code: "AUTHENTICATION_REQUIRED", message: "Entre." } }, 401));
+      }
+      if (url === "/api/auth/login") return pending;
+      return Promise.resolve(response({ data: [], meta: { page: 1, limit: 12, total: 0, totalPages: 0 } }));
+    });
     const user = userEvent.setup();
     render(<Providers path="/login" />);
     await user.type(await screen.findByLabelText(/e-mail/i), "bidder@example.com");
@@ -62,7 +68,7 @@ describe("web authentication", () => {
     await user.click(screen.getByRole("button", { name: "Entrar" }));
     expect(screen.getByRole("button", { name: "Entrar" })).toBeDisabled();
     resolveLogin(response({ data: { id: "1", name: "Licitante", email: "bidder@example.com", role: "BIDDER" } }));
-    expect(await screen.findByRole("heading", { name: "Vitrine de leiloes" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Livros em leilão." })).toBeInTheDocument();
   });
 
   it("shows error feedback when login fails", async () => {
