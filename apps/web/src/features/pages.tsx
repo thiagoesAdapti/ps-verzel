@@ -1,11 +1,11 @@
-import { ShieldCheck } from "lucide-react";
+import { BookOpen, Check, Search, ShieldCheck } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { Page } from "../app/app-layout.tsx";
 import { useAuth } from "../app/auth-provider.tsx";
 import { useToast } from "../app/toast-provider.tsx";
-import { Badge, formatAuctionDateTime, LotCard, Metric, MoneyDisplay, type Lot } from "../components/domain/index.tsx";
-import { Button, Card, ConfirmationModal, EmptyState, ErrorState, FormField, Input, LoadingState, Pagination } from "../components/ui/index.tsx";
+import { Badge, BookCover, conditionLabel, formatAuctionDateTime, LotCard, Metric, MoneyDisplay, money, openLibraryCoverUrl, type Lot } from "../components/domain/index.tsx";
+import { Button, Card, ConfirmationModal, EmptyState, ErrorState, FormField, Input, LoadingState, MoneyInput, Pagination, Select, Textarea } from "../components/ui/index.tsx";
 import { api, apiPage } from "../services/api.ts";
 
 function useData<T>(load: () => Promise<T>, deps: unknown[] = []) {
@@ -208,4 +208,121 @@ export function AuctioneerPage() {
       onClose={() => setCancelTarget(null)}
     />
   </>;
+}
+
+type CatalogBook = {
+  key: string;
+  title: string;
+  authors: string[];
+  publicationYear: number | null;
+  publisher: string | null;
+  coverId: number | null;
+  catalogToken: string;
+};
+
+export function CreateLotPage() {
+  const { showToast } = useToast();
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<CatalogBook[]>([]);
+  const [selected, setSelected] = useState<CatalogBook | null>(null);
+  const [choosingBook, setChoosingBook] = useState(true);
+  const [showAllResults, setShowAllResults] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [description, setDescription] = useState("");
+  const [condition, setCondition] = useState<"EXCELLENT" | "GOOD" | "FAIR" | "POOR">("GOOD");
+  const [startingCents, setStartingCents] = useState("");
+  const [incrementCents, setIncrementCents] = useState("");
+
+  const descriptionContentLength = description.trim().length;
+  const missingDescriptionCharacters = Math.max(0, 10 - descriptionContentLength);
+  const descriptionTooShort = description.length > 0 && descriptionContentLength < 10;
+  const descriptionAtLimit = description.length >= 2000;
+  const descriptionFeedback = description.length === 0
+    ? "Mínimo de 10 caracteres."
+    : descriptionTooShort
+      ? `Falta${missingDescriptionCharacters === 1 ? "" : "m"} ${missingDescriptionCharacters} caractere${missingDescriptionCharacters === 1 ? "" : "s"} para o mínimo.`
+      : descriptionAtLimit ? "Limite máximo atingido." : "Mínimo de 10 caracteres atingido.";
+  const descriptionCounterClass = descriptionTooShort
+    ? "character-counter-invalid"
+    : descriptionAtLimit ? "character-counter-limit" : descriptionContentLength >= 10 ? "character-counter-valid" : "";
+  const visibleResults = showAllResults ? results : results.slice(0, 5);
+  const selectedCoverUrl = openLibraryCoverUrl(selected?.coverId);
+
+  const search = async () => {
+    if (query.trim().length < 2 || searching) return;
+    setSearching(true);
+    try {
+      const books = await api<CatalogBook[]>(`/catalog/search?q=${encodeURIComponent(query)}`);
+      setResults(books);
+      setShowAllResults(false);
+      if (!books.length) {
+        showToast({ kind: "warning", title: "Nenhum livro encontrado", message: "Tente pesquisar por outro título ou autor." });
+      }
+    } catch (caught) {
+      showToast({ kind: "error", title: "Não foi possível buscar livros", message: errorMessage(caught) });
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  return <Page eyebrow="Gestão de lotes" title="Criar novo lote" description="Selecione um livro do catálogo e defina as condições do leilão.">
+    <form className="create-grid" onSubmit={(event) => event.preventDefault()}>
+      <div className="stack">
+        <Card>
+          <div className="card-heading">
+            <div><span className="eyebrow">Livro<span className="required-mark" aria-hidden="true"> *</span></span><h3>Buscar na Open Library</h3></div>
+            {selected && !choosingBook && <Button type="button" variant="ghost" size="sm" onClick={() => setChoosingBook(true)}>Trocar livro</Button>}
+          </div>
+          {selected && !choosingBook
+            ? <div className="selected-book-summary"><BookOpen aria-hidden="true" /><span><strong>{selected.title}</strong><small>{selected.authors.join(", ")} · {selected.publicationYear ?? "Ano não informado"}</small></span><Check aria-hidden="true" /></div>
+            : <>
+                <div className="search-row">
+                  <Input
+                    aria-label="Título ou autor"
+                    value={query}
+                    onChange={(event) => setQuery(event.currentTarget.value)}
+                    onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void search(); } }}
+                    placeholder="Título ou autor"
+                  />
+                  <Button type="button" loading={searching} disabled={query.trim().length < 2} onClick={() => void search()}><Search size={17} /> Buscar</Button>
+                </div>
+                {visibleResults.length > 0 && <div className={`catalog-results ${showAllResults ? "expanded" : ""}`}>
+                  {visibleResults.map((book) => <button
+                    type="button"
+                    className={`catalog-item ${selected?.key === book.key ? "selected" : ""}`}
+                    key={book.key}
+                    onClick={() => { setSelected(book); setChoosingBook(false); }}
+                  ><BookOpen aria-hidden="true" /><span><strong>{book.title}</strong><small>{book.authors.join(", ")} · {book.publicationYear ?? "Ano não informado"}</small></span>{selected?.key === book.key && <Check aria-hidden="true" />}</button>)}
+                </div>}
+                {results.length > 5 && <Button className="catalog-results-toggle" type="button" variant="ghost" size="sm" onClick={() => setShowAllResults((current) => !current)}>{showAllResults ? "Mostrar menos" : `Ver mais ${results.length - 5} resultados`}</Button>}
+              </>}
+        </Card>
+        <Card>
+          <span className="eyebrow">Condições</span><h3>Condições do exemplar</h3>
+          <FormField label="Descrição do exemplar" htmlFor="description" required>
+            <Textarea id="description" rows={4} minLength={10} maxLength={2000} value={description} onChange={(event) => setDescription(event.currentTarget.value)} aria-describedby="description-counter" aria-invalid={descriptionTooShort} required />
+            <small id="description-counter" className={`character-counter ${descriptionCounterClass}`} aria-live="polite"><span>{descriptionFeedback}</span><span>{description.length.toLocaleString("pt-BR")}/2.000</span></small>
+          </FormField>
+          <FormField label="Estado de conservação" htmlFor="condition">
+            <Select id="condition" value={condition} onChange={(event) => setCondition(event.currentTarget.value as typeof condition)} required>
+              <option value="EXCELLENT">Excelente</option><option value="GOOD">Bom</option><option value="FAIR">Regular</option><option value="POOR">Ruim</option>
+            </Select>
+          </FormField>
+          <div className="form-grid">
+            <FormField label="Lance inicial" htmlFor="starting"><MoneyInput id="starting" valueCents={startingCents} onValueChange={setStartingCents} required /></FormField>
+            <FormField label="Incremento mínimo" htmlFor="increment"><MoneyInput id="increment" valueCents={incrementCents} onValueChange={setIncrementCents} required /></FormField>
+          </div>
+        </Card>
+      </div>
+      <aside className="preview-column"><Card className="preview">
+        <h3>Prévia do lote</h3>
+        <div className="preview-book-summary">
+          <BookCover src={selectedCoverUrl} title={selected?.title ?? "Nenhum livro selecionado"} className="preview-cover" />
+          <div className="preview-book-copy"><strong>{selected?.title ?? "Selecione um livro"}</strong><span>{selected?.authors.join(", ") ?? "Pesquise e selecione um item para continuar."}</span>{selected && <Badge status={conditionLabel(condition)} />}</div>
+        </div>
+        <div className="preview-facts"><div><span>Lance inicial</span><strong>{startingCents ? money(startingCents) : "—"}</strong></div><div><span>Incremento</span><strong>{incrementCents ? money(incrementCents) : "—"}</strong></div></div>
+        <Button className="full" size="lg" disabled>Configure o agendamento</Button>
+      </Card></aside>
+    </form>
+  </Page>;
 }

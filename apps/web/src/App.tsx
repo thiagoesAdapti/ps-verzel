@@ -2,7 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./app/app-layout.tsx";
 import { useAuth, type User } from "./app/auth-provider.tsx";
 import { LoadingState } from "./components/ui/index.tsx";
-import { AuctioneerPage, HomePage, LoginPage, RegisterPage } from "./features/pages.tsx";
+import { AuctioneerPage, CreateLotPage, HomePage, LoginPage, RegisterPage } from "./features/pages.tsx";
 
 function PendingScreen({ title }: { title: string }) {
   return (
@@ -33,7 +33,7 @@ export function App() {
         <Route path="/wallet" element={<Protected role="BIDDER"><PendingScreen title="Carteira" /></Protected>} />
         <Route path="/my-auctions" element={<Protected role="BIDDER"><PendingScreen title="Meus leiloes" /></Protected>} />
         <Route path="/auctioneer" element={<Protected role="AUCTIONEER"><AuctioneerPage /></Protected>} />
-        <Route path="/auctioneer/lots/new" element={<Protected role="AUCTIONEER"><PendingScreen title="Novo lote" /></Protected>} />
+        <Route path="/auctioneer/lots/new" element={<Protected role="AUCTIONEER"><CreateLotPage /></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
