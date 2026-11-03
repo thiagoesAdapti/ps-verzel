@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Router } from "express";
+import { Router, type CookieOptions } from "express";
 import { z } from "zod";
 import { prisma, transaction } from "../../config/database.ts";
 import { env } from "../../config/env.ts";
@@ -8,7 +8,19 @@ import { AppError } from "../../shared/errors.ts";
 import { requireAuth } from "../../middlewares/auth.middleware.ts";
 
 export const authRouter = Router();
-const cookie = { httpOnly: true, sameSite: "lax" as const, secure: env.NODE_ENV === "production", path: "/", maxAge: 7 * 24 * 60 * 60 * 1000 };
+
+export function sessionCookieOptions(nodeEnv: typeof env.NODE_ENV): CookieOptions & { maxAge: number } {
+  return {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: nodeEnv === "production",
+    path: "/",
+    maxAge: 7 * 24 * 60 * 60 * 1000
+  };
+}
+
+const cookie = sessionCookieOptions(env.NODE_ENV);
+const { maxAge: _maxAge, ...clearCookie } = cookie;
 const userBody = z.object({ name: z.string().trim().min(2).max(120), email: z.email().max(320).transform((v) => v.toLowerCase()), password: z.string().min(8).max(200), role: z.enum(["AUCTIONEER", "BIDDER"]) });
 
 authRouter.post("/register", async (req, res) => {
@@ -34,7 +46,7 @@ authRouter.post("/login", async (req, res) => {
 
 authRouter.post("/logout", requireAuth, async (req, res) => {
   await prisma.session.update({ where: { id: req.auth!.sessionId }, data: { revokedAt: new Date() } });
-  res.clearCookie("auction_sid", { path: "/" }).json({ data: { success: true } });
+  res.clearCookie("auction_sid", clearCookie).json({ data: { success: true } });
 });
 
 authRouter.get("/me", requireAuth, (req, res) => res.json({ data: { id: req.auth!.userId, name: req.auth!.name, email: req.auth!.email, role: req.auth!.role } }));

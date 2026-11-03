@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { app } from "../../src/app.ts";
 import { requireRole } from "../../src/middlewares/auth.middleware.ts";
 import { errorMiddleware, requestContext } from "../../src/middlewares/error.middleware.ts";
+import { sessionCookieOptions } from "../../src/modules/auth/auth.routes.ts";
 
 function roleApp(role?: "AUCTIONEER" | "BIDDER") {
   const target = express();
@@ -50,5 +51,15 @@ describe("authorization and origin protection", () => {
   it("keeps safe public reads available", async () => {
     const response = await request(app).get("/api/health").set("Origin", "https://example.invalid");
     expect(response.status).toBe(200);
+  });
+
+  it("uses a host-only secure session cookie in production", () => {
+    expect(sessionCookieOptions("production")).toMatchObject({
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/"
+    });
+    expect(sessionCookieOptions("production")).not.toHaveProperty("domain");
   });
 });

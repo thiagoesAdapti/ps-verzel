@@ -49,6 +49,12 @@ const publicKey = createPublicKey({
   type: "spki"
 });
 
+const derivedPublicKey = createPublicKey(privateKey).export({ format: "der", type: "spki" });
+const configuredPublicKey = publicKey.export({ format: "der", type: "spki" });
+if (!derivedPublicKey.equals(configuredPublicKey)) {
+  throw new Error("AUDIT_PRIVATE_KEY e AUDIT_PUBLIC_KEY nao formam um par Ed25519 valido.");
+}
+
 export const signCanonical = (value: string) => sign(null, Buffer.from(value), privateKey).toString("base64");
 export const verifyCanonical = (value: string, signature: string) => verify(null, Buffer.from(value), publicKey, Buffer.from(signature, "base64"));
 export const publicKeyBase64 = env.AUDIT_PUBLIC_KEY;
