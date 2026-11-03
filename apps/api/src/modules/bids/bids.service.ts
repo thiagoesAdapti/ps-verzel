@@ -209,6 +209,10 @@ export async function placeBid(input: {
           },
           update: { currentBidId: bidId, amountCents: input.amountCents, status: "ACTIVE" }
         });
+        const extend = lot.effectiveEndsAt.getTime() - now.getTime() <= 120_000;
+        const effectiveEndsAt = extend
+          ? new Date(lot.effectiveEndsAt.getTime() + 120_000)
+          : lot.effectiveEndsAt;
         const updatedLot = await tx.lot.update({
           where: { id: input.lotId },
           data: {
@@ -216,10 +220,11 @@ export async function placeBid(input: {
             currentLeaderId: input.bidderId,
             bidCount: { increment: 1 },
             version: { increment: 1 },
+            effectiveEndsAt,
             auditState: "PENDING"
           }
         });
-        return { bid, lot: updatedLot, participant };
+        return { bid, lot: updatedLot, participant, extended: extend };
       }, transactionOptions);
 
       databaseCommitted = true;
@@ -242,7 +247,7 @@ export async function placeBid(input: {
         effectiveEndsAt: persisted.lot.effectiveEndsAt.toISOString(),
         version: persisted.lot.version,
         isLeading: true,
-        extended: false,
+        extended: persisted.extended,
         participant: `Licitante ${String(persisted.participant.publicNumber).padStart(2, "0")}`
       };
       await transaction(async (tx) => {
