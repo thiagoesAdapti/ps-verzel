@@ -4,9 +4,9 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Page } from "../app/app-layout.tsx";
 import { useAuth } from "../app/auth-provider.tsx";
 import { useToast } from "../app/toast-provider.tsx";
-import { Badge, BookCover, conditionLabel, formatAuctionDateTime, LotCard, lotBidLabel, Metric, MoneyDisplay, money, openLibraryCoverUrl, type Lot } from "../components/domain/index.tsx";
+import { Badge, BookCover, conditionLabel, formatAuctionDateTime, lotBidLabel, LotCard, Metric, MoneyDisplay, money, openLibraryCoverUrl, type Lot } from "../components/domain/index.tsx";
 import { Button, Card, ConfirmationModal, EmptyState, ErrorState, FormField, Input, LoadingState, MoneyInput, Pagination, Select, StatusMessage, Textarea } from "../components/ui/index.tsx";
-import { api, ApiError, apiPage, idempotencyKey } from "../services/api.ts";
+import { api, apiPage, ApiError, idempotencyKey } from "../services/api.ts";
 import { socket } from "../services/socket.ts";
 
 function useData<T>(load: () => Promise<T>, deps: unknown[] = []) {
@@ -122,7 +122,7 @@ export function bidCountLabel(count: number) {
 }
 
 export function minimumBidLabel(isLeading: boolean | undefined) {
-  return isLeading ? "Proximo lance minimo" : "Lance minimo";
+  return isLeading ? "Próximo lance mínimo" : "Lance mínimo";
 }
 
 export function RoomPage() {
@@ -188,7 +188,7 @@ export function RoomPage() {
     event.preventDefault();
     setBusy(true);
     try {
-      if (!amountCents) throw new Error("Informe um valor valido.");
+      if (!amountCents) throw new Error("Informe um valor válido.");
       const operation = pendingBid.current?.amountCents === amountCents
         ? pendingBid.current
         : { amountCents, key: idempotencyKey() };
@@ -213,9 +213,9 @@ export function RoomPage() {
       if (!pending) pendingBid.current = null;
       showToast({
         kind: pending ? "warning" : "error",
-        title: pending ? "Lance em verificacao" : "Nao foi possivel registrar o lance",
+        title: pending ? "Lance em verificação" : "Não foi possível registrar o lance",
         message: pending
-          ? "Estamos verificando o resultado desta operacao."
+          ? "Estamos verificando o resultado desta operação."
           : errorMessage(caught)
       });
     } finally {
@@ -235,15 +235,15 @@ export function RoomPage() {
           <BookCover src={item.coverUrl} title={item.title} className="detail-cover" />
           <div className="facts">
             <div><span>Conservacao</span><strong>{conditionLabel(item.condition)}</strong></div>
-            <div><span>Publicacao</span><strong>{item.publicationYear ?? "Nao informada"}</strong></div>
+            <div><span>Publicação</span><strong>{item.publicationYear ?? "Não informada"}</strong></div>
           </div>
           <h3>Sobre este exemplar</h3>
           <p>{item.description}</p>
         </Card>
         <Card>
           <div className="card-heading">
-            <h3>Historico de lances</h3>
-            <Link to={`/lots/${id}/audit`}>Auditar historico -&gt;</Link>
+            <h3>Histórico de lances</h3>
+            <Link to={`/lots/${id}/audit`}>Auditar histórico -&gt;</Link>
           </div>
           {bids.error
             ? <StatusMessage kind="warning">{bids.error}</StatusMessage>
@@ -265,10 +265,10 @@ export function RoomPage() {
                       totalPages={bids.data.meta.totalPages}
                       total={bids.data.meta.total}
                       onPageChange={setBidPage}
-                      label="Paginacao do historico de lances"
+                      label="Paginação do histórico de lances"
                     />
                   </>
-                : <EmptyState title="Nenhum lance" description="Este lote ainda nao recebeu lances." />}
+                : <EmptyState title="Nenhum lance" description="Este lote ainda não recebeu lances." />}
         </Card>
       </div>
       <aside className="stack room-sidebar">
@@ -278,7 +278,7 @@ export function RoomPage() {
             {item.status === "LIVE" && <span
               className={`connection-indicator ${connected ? "connected" : "reconnecting"}`}
               role="status"
-            >{connected ? "Ao vivo - Conectado" : "Ao vivo - Reconectando..."}</span>}
+            >{connected ? "Ao vivo · Conectado" : "Ao vivo · Reconectando…"}</span>}
           </div>
           <MoneyDisplay large value={item.currentBidCents ?? item.startingBidCents} />
           <p>{bidCountLabel(item.bidCount)}</p>
@@ -286,22 +286,22 @@ export function RoomPage() {
           <Countdown endsAt={item.effectiveEndsAt} serverNow={item.serverNow} status={item.status} />
           {item.status === "LIVE" && <>
             <div className="divider" />
-            {user?.role === "BIDDER" && <div className="bid-context" aria-label="Informacoes para o lance">
+            {user?.role === "BIDDER" && <div className="bid-context" aria-label="Informações para o lance">
               <div><span>{minimumBidLabel(item.isLeading)}</span><MoneyDisplay value={item.nextMinimumCents} /></div>
               <div>
                 <span>Seu saldo disponivel</span>
                 <strong>{wallet.data
                   ? <MoneyDisplay value={wallet.data.availableCents} />
-                  : wallet.error ? "Indisponivel" : "Consultando..."}</strong>
+                  : wallet.error ? "Indisponível" : "Consultando…"}</strong>
               </div>
             </div>}
             {item.auditState !== "READY"
               ? <StatusMessage kind="info">O lote esta sincronizando com a auditoria.</StatusMessage>
               : user?.role === "AUCTIONEER"
-                ? <StatusMessage kind="info">Voce esta acompanhando como leiloeiro. Apenas licitantes podem dar lances.</StatusMessage>
+                ? <StatusMessage kind="info">Você está acompanhando este leilão como leiloeiro. Apenas licitantes podem dar lances.</StatusMessage>
                 : user?.role === "BIDDER"
                   ? item.isLeading
-                    ? <StatusMessage kind="success">Voce esta liderando este leilao.</StatusMessage>
+                    ? <StatusMessage kind="success">Você está liderando este leilão.</StatusMessage>
                     : <form onSubmit={submit}>
                         <FormField label="Seu lance" htmlFor="bid">
                           <MoneyInput id="bid" valueCents={amountCents} onValueChange={setAmountCents} required />
@@ -348,10 +348,10 @@ function Countdown({ endsAt, serverNow, status }: { endsAt: string; serverNow: s
     return () => clearInterval(timer);
   }, []);
   const seconds = remainingSeconds(endsAt, now, offset);
-  if (status === "ENDED") return <p className="ended-label">Este leilao foi encerrado.</p>;
+  if (status === "ENDED") return <p className="ended-label">Este leilão foi encerrado.</p>;
   if (status === "CANCELLED") return <p className="ended-label">Este lote foi cancelado.</p>;
   return <div>
-    <span className="count-label">{status === "SCHEDULED" ? "Comeca em" : "Encerra em"}</span>
+    <span className="count-label">{status === "SCHEDULED" ? "Começa em" : "Encerra em"}</span>
     <div className="countdown">
       {countdownParts(seconds).map(({ value, label }) => <div key={label}>
         <strong>{String(value).padStart(2, "0")}</strong><span>{label}</span>
@@ -522,19 +522,19 @@ export function MyAuctionsPage() {
   return <Page
     eyebrow="Sua conta"
     title="Meus arremates"
-    description="Acompanhe suas disputas, vitorias e comprovantes."
+    description="Acompanhe suas disputas, vitórias e comprovantes."
   >
     <div className="metrics">
-      <Metric label="Participacoes" value={summary.total} note="Lotes com lances" />
+      <Metric label="Participações" value={summary.total} note="Lotes com lances" />
       <Metric label="Liderando" value={summary.leading} note="Disputas em andamento" />
-      <Metric label="Arrematados" value={summary.won} note="Comprovantes disponiveis" />
+      <Metric label="Arrematados" value={summary.won} note="Comprovantes disponíveis" />
     </div>
     <Card className="table-card">
       {items.data.data.length
         ? <>
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Lote</th><th>Situacao</th><th>Meu maior lance</th><th>Proximo passo</th></tr></thead>
+                <thead><tr><th>Lote</th><th>Situação</th><th>Meu maior lance</th><th>Próximo passo</th></tr></thead>
                 <tbody>{items.data.data.map((item) => <tr key={item.lotId}>
                   <td><strong>{item.title}</strong></td>
                   <td><Badge status={participationBadgeStatus(item)} /></td>
@@ -550,12 +550,12 @@ export function MyAuctionsPage() {
               totalPages={items.data.meta.totalPages}
               total={items.data.meta.total}
               onPageChange={setPage}
-              label="Paginacao das participacoes"
+              label="Paginação das participações"
             />
           </>
         : <EmptyState
-            title="Nenhuma participacao"
-            description="Quando voce der seu primeiro lance, o lote aparecera aqui."
+            title="Nenhuma participação"
+            description="Quando você der seu primeiro lance, o lote aparecerá aqui."
           />}
     </Card>
   </Page>;
@@ -585,12 +585,12 @@ export function ReceiptPage() {
       showToast({
         kind: "success",
         title: "Link copiado",
-        message: "O link do comprovante esta na area de transferencia."
+        message: "O link do comprovante está na área de transferência."
       });
     } catch (caught) {
       showToast({
         kind: "error",
-        title: "Nao foi possivel copiar o link",
+        title: "Não foi possível copiar o link",
         message: errorMessage(caught)
       });
     }
@@ -605,9 +605,9 @@ export function ReceiptPage() {
   return <div className="page receipt-page">
     <Card className="receipt">
       <div className="receipt-head">
-        <span className="eyebrow">Comprovante de arrematacao</span>
+        <span className="eyebrow">Comprovante de arrematação</span>
         <h1>Lote arrematado</h1>
-        <p>Registro publico da arrematacao, sem dados pessoais do vencedor.</p>
+        <p>Registro público da arrematação, sem dados pessoais do vencedor.</p>
       </div>
       <div className="receipt-book">
         <div className="receipt-book-copy">
@@ -620,7 +620,7 @@ export function ReceiptPage() {
       <div className="receipt-grid">
         <div><span>Comprovante</span><strong>{item.token.slice(0, 12).toUpperCase()}</strong></div>
         <div><span>Resultado</span><strong>Arrematado</strong></div>
-        <div><span>Vencedor publico</span><strong>{item.winner}</strong></div>
+        <div><span>Vencedor público</span><strong>{item.winner}</strong></div>
         <div><span>Encerramento</span><strong>{formatAuctionDateTime(item.settledAt)}</strong></div>
       </div>
       <div className="receipt-total">
@@ -638,21 +638,21 @@ type AuditStatus = "INTEGRO" | "ADULTERADO" | "INCONCLUSIVO";
 
 export function auditCheckResults(status: AuditStatus) {
   if (status === "INTEGRO") {
-    return { tone: "success", integrity: "Validada", sequence: "Validada", signatures: "Validas" } as const;
+    return { tone: "success", integrity: "Validada", sequence: "Validada", signatures: "Válidas" } as const;
   }
   if (status === "ADULTERADO") {
     return {
       tone: "error",
-      integrity: "Com divergencia",
-      sequence: "Nao confirmada",
-      signatures: "Nao confirmadas"
+      integrity: "Com divergência",
+      sequence: "Não confirmada",
+      signatures: "Não confirmadas"
     } as const;
   }
   return {
     tone: "warning",
-    integrity: "Nao concluida",
-    sequence: "Nao concluida",
-    signatures: "Nao concluidas"
+    integrity: "Não concluída",
+    sequence: "Não concluída",
+    signatures: "Não concluídas"
   } as const;
 }
 
@@ -692,21 +692,21 @@ export function AuditPage() {
     : item.status === "ADULTERADO" ? "error" : "warning";
   const checks = auditCheckResults(item.status);
   const resultLabel = item.status === "INTEGRO"
-    ? "Integro"
-    : item.status === "ADULTERADO" ? "Divergencia encontrada" : "Verificacao inconclusiva";
+    ? "Íntegro"
+    : item.status === "ADULTERADO" ? "Divergência encontrada" : "Verificação inconclusiva";
   const resultTitle = item.status === "INTEGRO"
-    ? "Historico integro"
+    ? "Histórico íntegro"
     : item.status === "ADULTERADO"
-      ? "Foi identificada uma divergencia no historico"
-      : "Nao foi possivel concluir a verificacao";
+      ? "Foi identificada uma divergência no histórico"
+      : "Não foi possível concluir a verificação";
   const explanation = item.status !== "INTEGRO"
     ? item.message
     : item.bidCount === 0
-      ? "O lote ainda nao possui lances. Os dados iniciais e o historico independente foram verificados sem divergencias."
-      : `Os ${item.bidCount} lance${item.bidCount === 1 ? "" : "s"} registrado${item.bidCount === 1 ? "" : "s"} correspondem ao historico independente e passaram pelas validacoes de integridade, sequencia e assinatura.`;
+      ? "O lote ainda não possui lances. Os dados iniciais e o histórico independente foram verificados sem divergências."
+      : `Os ${item.bidCount} lance${item.bidCount === 1 ? "" : "s"} registrado${item.bidCount === 1 ? "" : "s"} correspondem ao histórico independente e passaram pelas validações de integridade, sequência e assinatura.`;
 
   return <Page
-    eyebrow={`Historico publico - Lote ${id.slice(0, 8)}`}
+    eyebrow={`Histórico público · Lote ${id.slice(0, 8)}`}
     title="Auditoria de lances"
     description={`${lot.data.title} - ${lot.data.authors.join(", ")}`}
   >
@@ -716,12 +716,12 @@ export function AuditPage() {
     <div className="content-grid audit-grid">
       <Card>
         <div className="card-heading">
-          <h3>Historico completo</h3>
-          <Link to={`/lots/${id}`}>Ver leilao -&gt;</Link>
+          <h3>Histórico completo</h3>
+          <Link to={`/lots/${id}`}>Ver leilão -&gt;</Link>
         </div>
         {item.bids.length
           ? <div className="table-wrap"><table>
-              <thead><tr><th>Seq.</th><th>Participante</th><th>Valor</th><th>Horario</th></tr></thead>
+              <thead><tr><th>Seq.</th><th>Participante</th><th>Valor</th><th>Horário</th></tr></thead>
               <tbody>{item.bids.map((bid) => <tr key={bid.sequence}>
                 <td>{String(bid.sequence).padStart(3, "0")}</td>
                 <td>{bid.participant}</td>
@@ -730,12 +730,12 @@ export function AuditPage() {
               </tr>)}</tbody>
             </table></div>
           : <EmptyState
-              title="Historico vazio"
-              description="O lote ainda nao possui lances confirmados."
+              title="Histórico vazio"
+              description="O lote ainda não possui lances confirmados."
             />}
       </Card>
       <Card className="audit-summary-card">
-        <h3>Resumo da verificacao</h3>
+        <h3>Resumo da verificação</h3>
         <div className="line-list">
           <div className="line-row"><span>Lances verificados</span><strong>{item.bidCount}</strong></div>
           <div className="line-row">
@@ -744,7 +744,7 @@ export function AuditPage() {
           </div>
         </div>
         <details className="audit-technical-details">
-          <summary>Ver detalhes tecnicos</summary>
+          <summary>Ver detalhes técnicos</summary>
           <div className="audit-technical-content">
             <p>Resultado geral: <strong>{resultLabel}</strong></p>
             <ul className="audit-check-list">
@@ -753,11 +753,11 @@ export function AuditPage() {
                 <strong className={`audit-check-result-${checks.tone}`}>{checks.integrity}</strong>
               </li>
               <li>
-                <span>Sequencia dos lances</span>
+                <span>Sequência dos lances</span>
                 <strong className={`audit-check-result-${checks.tone}`}>{checks.sequence}</strong>
               </li>
               <li>
-                <span>Assinaturas criptograficas</span>
+                <span>Assinaturas criptográficas</span>
                 <strong className={`audit-check-result-${checks.tone}`}>{checks.signatures}</strong>
               </li>
             </ul>
@@ -1130,7 +1130,7 @@ export function CreateLotPage() {
       <div className="stack">
         <Card>
           <div className="card-heading">
-            <div><span className="eyebrow">Livro<span className="required-mark" aria-hidden="true"> *</span></span><h3>Buscar na Open Library</h3></div>
+            <div><span className="eyebrow">Livro<span className="required-mark" aria-hidden="true"> *</span><span className="sr-only"> (obrigatório)</span></span><h3>Buscar na Open Library</h3></div>
             {selected && !choosingBook && <Button type="button" variant="ghost" size="sm" onClick={() => setChoosingBook(true)}>Trocar livro</Button>}
           </div>
           {selected && !choosingBook
@@ -1155,16 +1155,17 @@ export function CreateLotPage() {
                   ><BookOpen aria-hidden="true" /><span><strong>{book.title}</strong><small>{book.authors.join(", ")} · {book.publicationYear ?? "Ano não informado"}</small></span>{selected?.key === book.key && <Check aria-hidden="true" />}</button>)}
                 </div>}
                 {results.length > 5 && <Button className="catalog-results-toggle" type="button" variant="ghost" size="sm" onClick={() => setShowAllResults((current) => !current)}>{showAllResults ? "Mostrar menos" : `Ver mais ${results.length - 5} resultados`}</Button>}
+                {selected && <Button className="keep-selected-book" type="button" variant="ghost" size="sm" onClick={() => setChoosingBook(false)}>Manter livro selecionado</Button>}
               </>}
         </Card>
         <Card>
           <span className="eyebrow">Condições</span><h3>Condições do exemplar</h3>
           <FormField label="Descrição do exemplar" htmlFor="description" required>
-            <Textarea id="description" rows={4} minLength={10} maxLength={2000} value={description} onChange={(event) => setDescription(event.currentTarget.value)} aria-describedby="description-counter" aria-invalid={descriptionTooShort} required />
+            <Textarea id="description" name="description" rows={4} minLength={10} maxLength={2000} value={description} onChange={(event) => setDescription(event.currentTarget.value)} aria-describedby="description-counter" aria-invalid={descriptionTooShort} required />
             <small id="description-counter" className={`character-counter ${descriptionCounterClass}`} aria-live="polite"><span>{descriptionFeedback}</span><span>{description.length.toLocaleString("pt-BR")}/2.000</span></small>
           </FormField>
           <FormField label="Estado de conservação" htmlFor="condition">
-            <Select id="condition" value={condition} onChange={(event) => setCondition(event.currentTarget.value as typeof condition)} required>
+            <Select id="condition" name="condition" value={condition} onChange={(event) => setCondition(event.currentTarget.value as typeof condition)} required>
               <option value="EXCELLENT">Excelente</option><option value="GOOD">Bom</option><option value="FAIR">Regular</option><option value="POOR">Ruim</option>
             </Select>
           </FormField>
@@ -1180,12 +1181,12 @@ export function CreateLotPage() {
             </div>
           </fieldset>
           {!startsImmediately && <div className="form-grid schedule-fields">
-            <FormField label="Data de início" htmlFor="startDate" required><Input id="startDate" type="date" min={minimumStartDate} value={startDate} onChange={(event) => setStartDate(event.currentTarget.value)} required aria-invalid={Boolean(schedule.startError)} /></FormField>
-            <FormField label="Horário de início" htmlFor="startTime" error={schedule.startError} required><Input id="startTime" type="time" step={60} min={minimumStartTime} value={startTime} onChange={(event) => setStartTime(event.currentTarget.value)} required aria-invalid={Boolean(schedule.startError)} /></FormField>
+            <FormField label="Data de início" htmlFor="startDate" required><Input id="startDate" name="startDate" type="date" min={minimumStartDate} value={startDate} onChange={(event) => setStartDate(event.currentTarget.value)} required aria-invalid={Boolean(schedule.startError)} /></FormField>
+            <FormField label="Horário de início" htmlFor="startTime" error={schedule.startError} required><Input id="startTime" name="startTime" type="time" step={60} min={minimumStartTime} value={startTime} onChange={(event) => setStartTime(event.currentTarget.value)} required aria-invalid={Boolean(schedule.startError)} /></FormField>
           </div>}
           <div className="form-grid schedule-fields">
-            <FormField label="Data de término" htmlFor="endDate" required><Input id="endDate" type="date" min={minimumEndDate} value={endDate} onChange={(event) => setEndDate(event.currentTarget.value)} required aria-invalid={Boolean(schedule.endError)} /></FormField>
-            <FormField label="Horário de término" htmlFor="endTime" error={schedule.endError} required><Input id="endTime" type="time" step={60} min={minimumEndTime} value={endTime} onChange={(event) => setEndTime(event.currentTarget.value)} required aria-invalid={Boolean(schedule.endError)} /></FormField>
+            <FormField label="Data de término" htmlFor="endDate" required><Input id="endDate" name="endDate" type="date" min={minimumEndDate} value={endDate} onChange={(event) => setEndDate(event.currentTarget.value)} required aria-invalid={Boolean(schedule.endError)} /></FormField>
+            <FormField label="Horário de término" htmlFor="endTime" error={schedule.endError} required><Input id="endTime" name="endTime" type="time" step={60} min={minimumEndTime} value={endTime} onChange={(event) => setEndTime(event.currentTarget.value)} required aria-invalid={Boolean(schedule.endError)} /></FormField>
           </div>
           <p className="timezone-note">Horário de Brasília.</p>
         </Card>

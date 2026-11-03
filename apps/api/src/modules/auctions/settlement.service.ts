@@ -15,7 +15,7 @@ export async function settleLot(lotId: string) {
   return transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM lots WHERE id = ${lotId}::uuid FOR UPDATE`;
     const lot = await tx.lot.findUnique({ where: { id: lotId } });
-    if (!lot) throw new AppError("RESOURCE_NOT_FOUND", 404, "Lote nao encontrado.");
+    if (!lot) throw new AppError("RESOURCE_NOT_FOUND", 404, "Lote não encontrado.");
     const existingSettlement = await tx.auctionSettlement.findUnique({ where: { lotId } });
     if (existingSettlement) return existingSettlement;
     const nowRows = await tx.$queryRaw<Array<{ now: Date }>>`SELECT CURRENT_TIMESTAMP AS now`;
@@ -39,7 +39,7 @@ export async function settleLot(lotId: string) {
     const winnerWallet = await tx.wallet.findUnique({ where: { userId: lot.currentLeaderId } });
     const sellerWallet = await tx.wallet.findUnique({ where: { userId: lot.sellerId } });
     if (!winnerWallet || !sellerWallet) {
-      throw new AppError("SETTLEMENT_FAILED", 500, "Carteiras da liquidacao nao foram encontradas.");
+      throw new AppError("SETTLEMENT_FAILED", 500, "Carteiras da liquidação não foram encontradas.");
     }
     for (const walletId of [winnerWallet.id, sellerWallet.id].sort()) {
       await tx.$queryRaw`SELECT id FROM wallets WHERE id = ${walletId}::uuid FOR UPDATE`;
@@ -48,7 +48,7 @@ export async function settleLot(lotId: string) {
       where: { walletId_lotId: { walletId: winnerWallet.id, lotId } }
     });
     if (!hold || hold.status !== "ACTIVE" || hold.amountCents !== lot.currentBidCents) {
-      throw new AppError("SETTLEMENT_FAILED", 409, "A reserva do vencedor esta inconsistente.");
+      throw new AppError("SETTLEMENT_FAILED", 409, "A reserva do vencedor está inconsistente.");
     }
     const winningBid = await tx.bid.findFirstOrThrow({
       where: { lotId },

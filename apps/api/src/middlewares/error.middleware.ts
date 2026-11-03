@@ -10,7 +10,7 @@ export const requestContext: RequestHandler = (req, _res, next) => {
 };
 
 export const notFound: RequestHandler = (_req, _res, next) => {
-  next(new AppError("RESOURCE_NOT_FOUND", 404, "Recurso nao encontrado."));
+  next(new AppError("RESOURCE_NOT_FOUND", 404, "Recurso não encontrado."));
 };
 
 export const errorMiddleware: ErrorRequestHandler = (error, req, res, _next) => {
@@ -18,7 +18,7 @@ export const errorMiddleware: ErrorRequestHandler = (error, req, res, _next) => 
     ? error
     : error instanceof ZodError
       ? new AppError("VALIDATION_ERROR", 422, "Confira os dados informados.", error.issues)
-      : new AppError("INTERNAL_ERROR", 500, "Nao foi possivel concluir a operacao.");
+      : new AppError("INTERNAL_ERROR", 500, "Não foi possível concluir a operação.");
 
   if (normalized.status >= 500) {
     log("error", "request.failed", {

@@ -30,8 +30,8 @@ function mockAudit(status: "INTEGRO" | "ADULTERADO" | "INCONCLUSIVO") {
         bidCount: 1,
         verifiedAt: "2026-11-02T18:00:00.000Z",
         message: status === "ADULTERADO"
-          ? "Foram identificadas divergencias no historico de lances."
-          : "Nao foi possivel verificar completamente este historico.",
+          ? "Foram identificadas divergências no histórico de lances."
+          : "Não foi possível verificar completamente este histórico.",
         bids: [{
           sequence: 1,
           participant: "Licitante 01",
@@ -45,37 +45,37 @@ function mockAudit(status: "INTEGRO" | "ADULTERADO" | "INCONCLUSIVO") {
 beforeEach(() => mocks.api.mockReset());
 
 describe("auditoria publica", () => {
-  it("mapeia os tres estados sem tratar inconclusivo como integro", () => {
+  it("mapeia os três estados sem tratar inconclusivo como íntegro", () => {
     expect(auditCheckResults("INTEGRO")).toMatchObject({ tone: "success", integrity: "Validada" });
-    expect(auditCheckResults("ADULTERADO")).toMatchObject({ tone: "error", integrity: "Com divergencia" });
-    expect(auditCheckResults("INCONCLUSIVO")).toMatchObject({ tone: "warning", integrity: "Nao concluida" });
+    expect(auditCheckResults("ADULTERADO")).toMatchObject({ tone: "error", integrity: "Com divergência" });
+    expect(auditCheckResults("INCONCLUSIVO")).toMatchObject({ tone: "warning", integrity: "Não concluída" });
   });
 
-  it("apresenta historico integro, pseudonimos e detalhes tecnicos", async () => {
+  it("apresenta histórico íntegro, pseudônimos e detalhes técnicos", async () => {
     mockAudit("INTEGRO");
     renderAudit();
-    expect(await screen.findByText("Historico integro")).toBeInTheDocument();
+    expect(await screen.findByText("Histórico íntegro")).toBeInTheDocument();
     expect(screen.getByText("Licitante 01")).toBeInTheDocument();
     expect(screen.getByText("001")).toBeInTheDocument();
-    await userEvent.click(screen.getByText("Ver detalhes tecnicos"));
+    await userEvent.click(screen.getByText("Ver detalhes técnicos"));
     expect(screen.getByText("Integridade dos registros")).toBeInTheDocument();
-    expect(screen.getByText("Validas")).toHaveClass("audit-check-result-success");
+    expect(screen.getByText("Válidas")).toHaveClass("audit-check-result-success");
   });
 
   it("preserva a mensagem critica para adulterado e inconclusivo", async () => {
     mockAudit("ADULTERADO");
     const rendered = renderAudit();
-    expect(await screen.findByText("Foi identificada uma divergencia no historico"))
+    expect(await screen.findByText("Foi identificada uma divergência no histórico"))
       .toBeInTheDocument();
-    expect(screen.getByText("Foram identificadas divergencias no historico de lances."))
+    expect(screen.getByText("Foram identificadas divergências no histórico de lances."))
       .toBeInTheDocument();
     rendered.unmount();
 
     mockAudit("INCONCLUSIVO");
     renderAudit();
-    expect(await screen.findByText("Nao foi possivel concluir a verificacao"))
+    expect(await screen.findByText("Não foi possível concluir a verificação"))
       .toBeInTheDocument();
-    expect(screen.getByText("Nao foi possivel verificar completamente este historico."))
+    expect(screen.getByText("Não foi possível verificar completamente este histórico."))
       .toBeInTheDocument();
   });
 });

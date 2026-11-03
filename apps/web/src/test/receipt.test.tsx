@@ -61,13 +61,13 @@ describe("comprovante publico", () => {
     renderReceipt();
     await userEvent.click(await screen.findByRole("button", { name: /Copiar link/ }));
     expect(mocks.writeText).toHaveBeenCalledWith(location.href);
-    expect(await screen.findByText("O link do comprovante esta na area de transferencia."))
+    expect(await screen.findByText("O link do comprovante está na área de transferência."))
       .toBeInTheDocument();
   });
 
   it("apresenta erro para token rejeitado pela API", async () => {
-    mocks.api.mockRejectedValue(new Error("Comprovante nao encontrado."));
+    mocks.api.mockRejectedValue(new Error("Comprovante não encontrado."));
     renderReceipt();
-    expect(await screen.findByText("Comprovante nao encontrado.")).toBeInTheDocument();
+    expect(await screen.findByText("Comprovante não encontrado.")).toBeInTheDocument();
   });
 });

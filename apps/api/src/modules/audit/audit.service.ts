@@ -15,7 +15,7 @@ export async function verifyLotAudit(lotId: string) {
       bidCount: 0,
       verifiedAt,
       algorithm: "SHA-256 + Ed25519",
-      message: "Nao foi possivel verificar completamente este historico.",
+      message: "Não foi possível verificar completamente este histórico.",
       proof: { genesisHash: null, latestHash: null, publicKey: publicKeyBase64 },
       bids: []
     };
@@ -27,12 +27,12 @@ export async function verifyLotAudit(lotId: string) {
     }
   });
   if (!lot && records.length === 0) {
-    throw new AppError("RESOURCE_NOT_FOUND", 404, "Lote nao encontrado.");
+    throw new AppError("RESOURCE_NOT_FOUND", 404, "Lote não encontrado.");
   }
   if (!validateLedger(records) || records.some((record) => record.lotId !== lotId)) {
     return auditResult(
       "ADULTERADO",
-      "Foram identificadas divergencias no historico de lances.",
+      "Foram identificadas divergências no histórico de lances.",
       lot,
       records,
       verifiedAt
@@ -53,7 +53,7 @@ export async function verifyLotAudit(lotId: string) {
   if (!genesisPrepare || !genesisCommit || openOperations.length > 0) {
     return auditResult(
       "INCONCLUSIVO",
-      "Nao foi possivel verificar completamente este historico.",
+      "Não foi possível verificar completamente este histórico.",
       lot,
       records,
       verifiedAt
@@ -62,7 +62,7 @@ export async function verifyLotAudit(lotId: string) {
   if (!lot || lot.genesisHash !== genesisPrepare.commitment) {
     return auditResult(
       "ADULTERADO",
-      "Foram identificadas divergencias no historico de lances.",
+      "Foram identificadas divergências no histórico de lances.",
       lot,
       records,
       verifiedAt
@@ -97,7 +97,7 @@ export async function verifyLotAudit(lotId: string) {
   if (commitWithoutPrepare || commits.length !== lot.bids.length || lot.bidCount !== lot.bids.length) {
     return auditResult(
       "ADULTERADO",
-      "Foram identificadas divergencias no historico de lances.",
+      "Foram identificadas divergências no histórico de lances.",
       lot,
       records,
       verifiedAt
@@ -126,7 +126,7 @@ export async function verifyLotAudit(lotId: string) {
     ) {
       return auditResult(
         "ADULTERADO",
-        "Foram identificadas divergencias no historico de lances.",
+        "Foram identificadas divergências no histórico de lances.",
         lot,
         records,
         verifiedAt
@@ -141,7 +141,7 @@ export async function verifyLotAudit(lotId: string) {
   ) {
     return auditResult(
       "ADULTERADO",
-      "Foram identificadas divergencias no historico de lances.",
+      "Foram identificadas divergências no histórico de lances.",
       lot,
       records,
       verifiedAt
@@ -149,7 +149,7 @@ export async function verifyLotAudit(lotId: string) {
   }
   return auditResult(
     "INTEGRO",
-    "O historico nao apresenta divergencias nas provas verificadas.",
+    "O histórico não apresenta divergências nas provas verificadas.",
     lot,
     records,
     verifiedAt

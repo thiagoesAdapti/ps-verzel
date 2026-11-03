@@ -90,12 +90,12 @@ test("vitrine, sala e auditoria públicas usam dados reais do E2E", async ({
     "contain"
   );
 
-  await page.getByRole("link", { name: /Auditar historico/ }).click();
+  await page.getByRole("link", { name: /Auditar histórico/ }).click();
   await expect(
     page.getByRole("heading", { name: "Auditoria de lances" })
   ).toBeVisible();
   await expect(
-    page.getByRole("status").filter({ hasText: "Historico integro" })
+    page.getByRole("status").filter({ hasText: "Histórico íntegro" })
   ).toBeVisible();
   await expect(page.getByText("Lances verificados").locator("..")).toContainText(
     "1"

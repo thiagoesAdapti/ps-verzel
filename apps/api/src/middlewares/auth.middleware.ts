@@ -34,7 +34,7 @@ export const requireRole = (...roles: UserRole[]): RequestHandler => (req, _res,
     return next(new AppError("AUTHENTICATION_REQUIRED", 401, "Entre na sua conta para continuar."));
   }
   if (!roles.includes(req.auth.role)) {
-    return next(new AppError("FORBIDDEN", 403, "Voce nao tem permissao para esta acao."));
+    return next(new AppError("FORBIDDEN", 403, "Você não tem permissão para esta ação."));
   }
   next();
 };

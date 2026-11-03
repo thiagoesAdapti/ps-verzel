@@ -38,7 +38,7 @@ async function request(path: string, init?: RequestInit): Promise<ApiBody> {
   if (!response.ok) {
     throw new ApiError(
       body.error?.code ?? "INTERNAL_ERROR",
-      body.error?.message ?? "Nao foi possivel concluir a operacao.",
+      body.error?.message ?? "Não foi possível concluir a operação.",
       response.status
     );
   }
@@ -55,7 +55,7 @@ export async function apiPage<T, Summary = never>(
 ): Promise<PaginatedResult<T, Summary>> {
   const body = await request(path, init);
   if (!body.meta) {
-    throw new ApiError("INVALID_RESPONSE", "A resposta paginada nao contem metadados.", 502);
+    throw new ApiError("INVALID_RESPONSE", "A resposta paginada não contém metadados.", 502);
   }
   return { data: body.data as T, meta: body.meta, summary: body.summary as Summary };
 }

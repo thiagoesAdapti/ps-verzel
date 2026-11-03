@@ -89,7 +89,7 @@ receiptsRouter.get("/:token", async (req, res) => {
     include: { lot: { include: { participants: true } }, settlement: true }
   });
   if (!receipt || !receipt.settlement.winnerId) {
-    throw new AppError("RESOURCE_NOT_FOUND", 404, "Comprovante nao encontrado.");
+    throw new AppError("RESOURCE_NOT_FOUND", 404, "Comprovante não encontrado.");
   }
   const winner = receipt.lot.participants.find(
     (participant) => participant.userId === receipt.settlement.winnerId

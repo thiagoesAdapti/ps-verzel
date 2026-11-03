@@ -147,7 +147,7 @@ describe("sala de leilao", () => {
     const input = await screen.findByLabelText("Seu lance");
     await userEvent.type(input, "100,00");
     fireEvent.submit(input.closest("form")!);
-    expect(await screen.findByText("Estamos verificando o resultado desta operacao."))
+    expect(await screen.findByText("Estamos verificando o resultado desta operação."))
       .toBeInTheDocument();
 
     fireEvent.submit(input.closest("form")!);

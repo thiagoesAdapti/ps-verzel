@@ -53,7 +53,7 @@ describe("meus arremates", () => {
     render(<MemoryRouter><MyAuctionsPage /></MemoryRouter>);
 
     expect(await screen.findByRole("heading", { name: "Meus arremates" })).toBeInTheDocument();
-    expect(screen.getByText("Participacoes").parentElement).toHaveTextContent("2");
+    expect(screen.getByText("Participações").parentElement).toHaveTextContent("2");
     expect(screen.getByText("Arrematados").parentElement).toHaveTextContent("1");
     expect(screen.getByRole("link", { name: /Comprovante/ })).toHaveAttribute(
       "href",
@@ -72,6 +72,6 @@ describe("meus arremates", () => {
       meta: { page: 1, limit: 12, total: 0, totalPages: 0 }
     });
     render(<MemoryRouter><MyAuctionsPage /></MemoryRouter>);
-    expect(await screen.findByText("Nenhuma participacao")).toBeInTheDocument();
+    expect(await screen.findByText("Nenhuma participação")).toBeInTheDocument();
   });
 });

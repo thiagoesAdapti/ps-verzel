@@ -6,10 +6,7 @@ import { AuthProvider } from "./app/auth-provider.tsx";
 import { ToastProvider } from "./app/toast-provider.tsx";
 import "./styles/globals.css";
 
-const root = document.getElementById("root");
-if (!root) throw new Error("Elemento raiz da aplicacao nao encontrado.");
-
-createRoot(root).render(
+createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
       <ToastProvider>
