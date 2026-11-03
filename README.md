@@ -176,6 +176,170 @@ Após executar o seed, utilize as seguintes contas **exclusivamente em ambiente 
 
 Esses acessos são fictícios e não devem ser utilizados em produção.
 
+## Implantação em produção na VPS
+
+Esta configuração destina-se a Ubuntu 26.04 LTS, Node.js 24, PostgreSQL 18 e Caddy, sem Docker. A aplicação fica em `/srv/leilao/app`, a API escuta exclusivamente em `127.0.0.1:3300` e o Caddy publica o frontend, `/api` e `/socket.io` em `https://leilao.figueiredo.tech`.
+
+Os arquivos em `deploy/` são modelos versionados. Antes de instalá-los, compare-os com a configuração atual da VPS. A configuração da cafeteria não deve ser substituída, removida ou reinicializada; adicione somente o novo virtual host e valide a configuração completa antes de recarregar o Caddy.
+
+### 1. Usuário, diretórios e código
+
+Crie um usuário de sistema sem privilégios administrativos e prepare os diretórios persistentes:
+
+```bash
+sudo adduser --system --group --home /srv/leilao --shell /usr/sbin/nologin leilao
+sudo -u leilao git clone <URL_DO_REPOSITORIO> /srv/leilao/app
+sudo install -d -o leilao -g leilao -m 0750 /srv/leilao/app/data/covers
+sudo install -d -o leilao -g leilao -m 0750 /srv/leilao/app/data/audit/anchors
+```
+
+Instale as versões exatas do lockfile e gere os artefatos compilados:
+
+```bash
+cd /srv/leilao/app
+sudo -u leilao npm ci
+sudo -u leilao env NODE_ENV=production DATABASE_URL=postgresql://build-only@127.0.0.1:5432/auction_house_leilao_prod npm run build
+```
+
+A URL usada apenas no build possui o nome permitido, mas não é utilizada para conectar ao banco. A conexão real é lida pelo serviço a partir do arquivo protegido descrito abaixo.
+
+### 2. Banco PostgreSQL exclusivo
+
+Crie um papel próprio e o único banco aceito em produção. Defina a senha de forma interativa para não registrá-la no histórico do shell:
+
+```sql
+CREATE ROLE auction_leilao LOGIN;
+\password auction_leilao
+CREATE DATABASE auction_house_leilao_prod OWNER auction_leilao;
+ALTER DATABASE auction_house_leilao_prod SET timezone TO 'UTC';
+```
+
+O PostgreSQL deve escutar apenas em loopback ou socket Unix. Preserve as regras necessárias à cafeteria e acrescente no `pg_hba.conf` somente o acesso local da nova aplicação, usando autenticação `scram-sha-256`. A porta `5432` não deve ser liberada no firewall público.
+
+O comando de produção aceita exclusivamente `auction_house_leilao_prod`. Antes de chamar `prisma migrate deploy`, ele valida o nome na URL e executa `SELECT current_database()`. `migrate reset`, `migrate dev`, `db push` e o seed demonstrativo são recusados em produção.
+
+### 3. Variáveis e segredos
+
+Crie o diretório de configuração fora do repositório:
+
+```bash
+sudo install -d -o root -g leilao -m 0750 /etc/leilao
+sudo touch /etc/leilao/leilao.env
+sudo chown root:leilao /etc/leilao/leilao.env
+sudo chmod 0640 /etc/leilao/leilao.env
+sudoedit /etc/leilao/leilao.env
+```
+
+O arquivo `/etc/leilao/leilao.env` deve conter, sem valores de exemplo:
+
+```dotenv
+NODE_ENV=production
+PORT=3300
+APP_ORIGIN=https://leilao.figueiredo.tech
+DATABASE_URL=postgresql://auction_leilao:<SENHA_CODIFICADA_NA_URL>@127.0.0.1:5432/auction_house_leilao_prod?schema=public
+AUDIT_ANCHOR_DIR=/srv/leilao/app/data/audit/anchors
+COVER_STORAGE_DIR=/srv/leilao/app/data/covers
+OPEN_LIBRARY_CONTACT_EMAIL=<EMAIL_DE_CONTATO>
+```
+
+Gere um segredo de sessão e um par Ed25519 novos diretamente em um segundo arquivo. O script falha se o arquivo já existir, aplica modo `0600` e nunca imprime os valores:
+
+```bash
+sudo /usr/bin/node /srv/leilao/app/scripts/generate-production-secrets.ts /etc/leilao/leilao-secrets.env
+sudo chown root:leilao /etc/leilao/leilao-secrets.env
+sudo chmod 0640 /etc/leilao/leilao-secrets.env
+```
+
+Não copie `.env`, segredo de sessão nem chaves do ambiente local. Os dois arquivos em `/etc/leilao` devem permanecer fora do Git, não podem ser enviados ao frontend e precisam de backup criptografado com acesso restrito. Mantenha o mesmo par Ed25519 durante toda a vida das evidências já emitidas; trocar as chaves sem um procedimento de rotação torna a verificação histórica inconclusiva.
+
+### 4. Migrations e serviços systemd
+
+Instale as unidades fornecidas e confira se os caminhos de `node` e `npm` são `/usr/bin/node` e `/usr/bin/npm` nessa VPS:
+
+```bash
+sudo install -o root -g root -m 0644 deploy/leilao.service /etc/systemd/system/leilao.service
+sudo install -o root -g root -m 0644 deploy/leilao-migrate.service /etc/systemd/system/leilao-migrate.service
+sudo systemctl daemon-reload
+sudo systemctl start leilao-migrate.service
+sudo systemctl enable --now leilao.service
+```
+
+Não execute `npm run db:seed` em produção. A unidade `leilao-migrate.service` usa `prisma migrate deploy` e encerra sem iniciar a API se a URL ou o banco conectado não corresponderem à allowlist. A unidade `leilao.service` executa uma única instância da API como usuário `leilao`; isso evita duplicar o scheduler. `systemd` envia `SIGTERM`, permitindo que sockets e conexões com o banco sejam encerrados de forma controlada.
+
+O banco preserva usuários, sessões, lotes, reservas e operações idempotentes. Os diretórios liberados para escrita pela unidade preservam capas e ledgers de auditoria entre reinicializações.
+
+### 5. Caddy, HTTPS e SPA
+
+O arquivo `deploy/Caddyfile.example` contém o virtual host do subdomínio. Instale-o como um arquivo adicional e faça o Caddyfile já existente importar os sites, sem substituir os blocos da cafeteria:
+
+```bash
+sudo install -d -o root -g root -m 0755 /etc/caddy/sites
+sudo install -o root -g root -m 0644 deploy/Caddyfile.example /etc/caddy/sites/leilao.caddy
+```
+
+Adicione uma única vez ao `/etc/caddy/Caddyfile`, caso ainda não exista:
+
+```caddyfile
+import /etc/caddy/sites/*.caddy
+```
+
+Permita a leitura apenas dos artefatos estáticos e valide toda a configuração antes de uma recarga graciosa:
+
+```bash
+sudo chmod o+x /srv/leilao /srv/leilao/app /srv/leilao/app/apps /srv/leilao/app/apps/web
+sudo chmod -R o=rX /srv/leilao/app/apps/web/dist
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
+```
+
+O bloco encaminha `/api/*` e `/socket.io*` para `127.0.0.1:3300`; o restante é servido a partir de `apps/web/dist`. O fallback de `try_files` entrega `index.html` para as rotas do React Router. O cliente usa URLs relativas, portanto API e Socket.IO permanecem na mesma origem pública e não dependem do proxy de desenvolvimento do Vite. O Caddy cuida da obtenção e renovação do certificado HTTPS quando o DNS do subdomínio aponta para a VPS e as portas `80` e `443` estão acessíveis.
+
+### 6. Backup e verificações
+
+Faça backups regulares e criptografados de:
+
+- `auction_house_leilao_prod`, usando `pg_dump` e uma credencial não registrada na linha de comando;
+- `/srv/leilao/app/data/covers` e `/srv/leilao/app/data/audit/anchors`;
+- `/etc/leilao/leilao.env` e `/etc/leilao/leilao-secrets.env`, em armazenamento separado e com acesso mínimo.
+
+Para obter uma cópia consistente entre PostgreSQL e ledger, use uma janela de manutenção e pare somente `leilao.service` durante a captura. Não pare nem altere os serviços da cafeteria. Teste periodicamente a restauração em ambiente isolado.
+
+Depois da instalação ou atualização, verifique:
+
+```bash
+sudo systemctl status leilao.service --no-pager
+sudo journalctl -u leilao.service -n 100 --no-pager
+curl --fail http://127.0.0.1:3300/api/health
+curl --fail https://leilao.figueiredo.tech/api/health
+ss -lnt | grep -E '127\.0\.0\.1:3300|127\.0\.0\.1:5432'
+```
+
+Além do health check, valide cadastro, login, criação de lote, um lance, atualização em tempo real, encerramento, comprovante, carregamento de capa e auditoria. Confirme no navegador que o cookie `auction_sid` está marcado como `HttpOnly`, `Secure` e `SameSite=Lax`.
+
+### 7. Atualização da aplicação
+
+Em uma janela de manutenção, execute exatamente a sequência abaixo. Ela não usa reset, seed, push forçado nem altera outros serviços:
+
+```bash
+sudo systemctl stop leilao.service
+sudo -u leilao git -C /srv/leilao/app status --short
+sudo -u leilao git -C /srv/leilao/app pull --ff-only origin main
+sudo -u leilao npm --prefix /srv/leilao/app ci
+sudo -u leilao env NODE_ENV=production DATABASE_URL=postgresql://build-only@127.0.0.1:5432/auction_house_leilao_prod npm --prefix /srv/leilao/app run build
+sudo install -o root -g root -m 0644 /srv/leilao/app/deploy/leilao.service /etc/systemd/system/leilao.service
+sudo install -o root -g root -m 0644 /srv/leilao/app/deploy/leilao-migrate.service /etc/systemd/system/leilao-migrate.service
+sudo install -o root -g root -m 0644 /srv/leilao/app/deploy/Caddyfile.example /etc/caddy/sites/leilao.caddy
+sudo systemctl daemon-reload
+sudo systemctl start leilao-migrate.service
+sudo chmod -R o=rX /srv/leilao/app/apps/web/dist
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl start leilao.service
+sudo systemctl reload caddy
+curl --fail https://leilao.figueiredo.tech/api/health
+```
+
+O `status --short` deve estar vazio antes do `pull`. Se houver arquivos inesperados, interrompa e investigue em vez de descartá-los. Se build, migration ou validação do Caddy falhar, não inicie a nova versão nem contorne as proteções.
+
 ## Testes
 
 ```powershell
@@ -186,15 +350,15 @@ npm run test:e2e
 npm run build
 ```
 
-A suíte automatizada contém **113 testes aprovados**:
+A suíte automatizada contém **115 testes aprovados**:
 
 | Categoria | Testes |
 |---|---:|
-| Unitários da API | 29 |
+| Unitários da API | 30 |
 | Componentes web | 30 |
-| Integração com PostgreSQL | 49 |
+| Integração com PostgreSQL | 50 |
 | E2E no Microsoft Edge | 5 |
-| **Total** | **113** |
+| **Total** | **115** |
 
 Os testes de integração utilizam um banco separado. O Playwright executa a aplicação e a API em portas próprias, com PostgreSQL e navegador reais. Apenas as respostas da Open Library são controladas por um serviço local durante os cenários determinísticos.
 
@@ -204,7 +368,7 @@ Para testar separadamente a integração com a API pública real da Open Library
 npm run test:external:open-library
 ```
 
-Essa verificação depende de conectividade e não integra a contagem dos 113 testes.
+Essa verificação depende de conectividade e não integra a contagem dos 115 testes.
 
 ## Decisões de arquitetura
 
@@ -242,7 +406,7 @@ A proteção foi projetada para detectar alterações diretas no banco sem acess
 - A busca de novos livros depende da disponibilidade da Open Library. Os lotes já importados permanecem acessíveis localmente.
 - O scheduler foi projetado para um único processo da API neste ambiente.
 - Os testes automatizados foram executados; a homologação manual em navegadores distintos, dispositivo físico e leitor de tela permanece uma etapa adicional.
-- O ambiente descrito neste README é local. A disponibilização pública exige configuração própria de infraestrutura, HTTPS, segredos e persistência adequada.
+- A operação pública depende da configuração correta da VPS, monitoramento, backups testados e homologação manual após cada implantação.
 
 ## Uso de inteligência artificial
 
