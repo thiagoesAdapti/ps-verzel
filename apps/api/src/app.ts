@@ -8,6 +8,7 @@ import { errorMiddleware, notFound, requestContext } from "./middlewares/error.m
 import { requireOrigin } from "./middlewares/origin.middleware.ts";
 import { authRouter } from "./modules/auth/auth.routes.ts";
 import { catalogRouter } from "./modules/catalog/catalog.routes.ts";
+import { lotsRouter } from "./modules/lots/lots.routes.ts";
 
 export const app = express();
 
@@ -30,4 +31,5 @@ app.get("/api/covers/:filename", (req, res, next) => {
 });
 app.use("/api/auth", authRouter);
 app.use("/api/catalog", catalogRouter);
+app.use("/api/lots", lotsRouter);
 app.use(notFound, errorMiddleware);
