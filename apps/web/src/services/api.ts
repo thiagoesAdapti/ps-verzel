@@ -59,3 +59,5 @@ export async function apiPage<T, Summary = never>(
   }
   return { data: body.data as T, meta: body.meta, summary: body.summary as Summary };
 }
+
+export const idempotencyKey = () => crypto.randomUUID();

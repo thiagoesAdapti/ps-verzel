@@ -5,8 +5,8 @@ import { Page } from "../app/app-layout.tsx";
 import { useAuth } from "../app/auth-provider.tsx";
 import { useToast } from "../app/toast-provider.tsx";
 import { Badge, BookCover, conditionLabel, formatAuctionDateTime, LotCard, Metric, MoneyDisplay, money, openLibraryCoverUrl, type Lot } from "../components/domain/index.tsx";
-import { Button, Card, ConfirmationModal, EmptyState, ErrorState, FormField, Input, LoadingState, MoneyInput, Pagination, Select, Textarea } from "../components/ui/index.tsx";
-import { api, apiPage } from "../services/api.ts";
+import { Button, Card, ConfirmationModal, EmptyState, ErrorState, FormField, Input, LoadingState, MoneyInput, Pagination, Select, StatusMessage, Textarea } from "../components/ui/index.tsx";
+import { api, apiPage, idempotencyKey } from "../services/api.ts";
 
 function useData<T>(load: () => Promise<T>, deps: unknown[] = []) {
   const [data, setData] = useState<T | null>(null);
@@ -106,6 +106,124 @@ function AuthPage({ register = false }: { register?: boolean }) {
   return <div className="auth-page"><Link className="wordmark auth-wordmark" to="/">Casa de Leilões<span>.</span></Link><div className="auth-title"><h1>{register ? "Crie sua conta" : "Acesse sua conta"}</h1><p>{register ? "Cadastre-se para ofertar lances ou publicar lotes." : "Entre para acompanhar suas atividades."}</p></div><Card><form onSubmit={submit}>{register && <FormField label="Nome completo" htmlFor="name"><Input id="name" name="name" minLength={2} required autoComplete="name" /></FormField>}<FormField label="E-mail" htmlFor="email"><Input id="email" name="email" type="email" required autoComplete="email" /></FormField><FormField label="Senha" htmlFor="password" hint={register ? "Use no mínimo oito caracteres." : undefined}><Input id="password" name="password" type="password" minLength={register ? 8 : 1} required autoComplete={register ? "new-password" : "current-password"} /></FormField>{register && <div className="field"><label>Quero participar como</label><div className="role-grid"><button type="button" className={role === "BIDDER" ? "role active" : "role"} onClick={() => setRole("BIDDER")}><strong>Licitante</strong><small>Dar lances e arrematar livros</small></button><button type="button" className={role === "AUCTIONEER" ? "role active" : "role"} onClick={() => setRole("AUCTIONEER")}><strong>Leiloeiro</strong><small>Criar e gerenciar lotes</small></button></div></div>}<Button className="full" size="lg" loading={busy}>{register ? "Criar conta" : "Entrar"}</Button></form><p className="auth-switch">{register ? "Já tem uma conta?" : "Ainda não tem conta?"} <Link to={register ? "/login" : "/register"}>{register ? "Entrar" : "Cadastre-se"}</Link></p></Card></div>;
 }
 export const LoginPage = () => <AuthPage />; export const RegisterPage = () => <AuthPage register />;
+
+type WalletData = { totalCents: string; reservedCents: string; availableCents: string };
+type Transaction = {
+  id: string;
+  type: "DEPOSIT" | "AUCTION_DEBIT" | "AUCTION_CREDIT";
+  amountCents: string;
+  balanceAfterCents: string;
+  lotTitle: string | null;
+  receiptToken: string | null;
+  createdAt: string;
+};
+
+export function walletTransactionPresentation(type: Transaction["type"], amountCents: string) {
+  const amount = BigInt(amountCents);
+  const absoluteCents = (amount < 0n ? -amount : amount).toString();
+  if (type === "AUCTION_DEBIT") {
+    return { label: "Arrematação", detail: "Saldo debitado", direction: "debit", sign: "−", absoluteCents } as const;
+  }
+  if (type === "AUCTION_CREDIT") {
+    return { label: "Venda de lote", detail: "Saldo creditado", direction: "credit", sign: "+", absoluteCents } as const;
+  }
+  return { label: "Depósito simulado", detail: "Saldo creditado", direction: "credit", sign: "+", absoluteCents } as const;
+}
+
+export function WalletPage() {
+  const { showToast } = useToast();
+  const [busy, setBusy] = useState(false);
+  const [depositCents, setDepositCents] = useState("");
+  const [transactionPage, setTransactionPage] = useState(1);
+  const wallet = useData(() => api<WalletData>("/wallet"), []);
+  const transactions = useData(
+    () => apiPage<Transaction[]>(`/wallet/transactions?page=${transactionPage}&limit=10`),
+    [transactionPage]
+  );
+  const pendingDeposit = useRef<{ amountCents: string; key: string } | null>(null);
+
+  const deposit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true);
+    try {
+      if (!depositCents) throw new Error("Informe um valor válido.");
+      const operation = pendingDeposit.current?.amountCents === depositCents
+        ? pendingDeposit.current
+        : { amountCents: depositCents, key: idempotencyKey() };
+      pendingDeposit.current = operation;
+      await api("/wallet/deposits", {
+        method: "POST",
+        headers: { "Idempotency-Key": operation.key },
+        body: JSON.stringify({ amountCents: operation.amountCents })
+      });
+      pendingDeposit.current = null;
+      setDepositCents("");
+      showToast({ kind: "success", title: "Saldo adicionado", message: "Seu saldo simulado foi atualizado." });
+      await wallet.refresh();
+      if (transactionPage === 1) await transactions.refresh();
+      else setTransactionPage(1);
+    } catch (caught) {
+      showToast({ kind: "error", title: "Não foi possível adicionar saldo", message: errorMessage(caught) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (wallet.error) return <Page title="Minha carteira"><ErrorState message={wallet.error} retry={wallet.refresh} /></Page>;
+  if (!wallet.data) return <LoadingState />;
+
+  return <Page eyebrow="Sua conta" title="Minha carteira" description="Consulte seu saldo e os valores reservados para lances.">
+    <div className="metrics">
+      <Metric label="Saldo total" value={<MoneyDisplay value={wallet.data.totalCents} />} note="Depósitos e movimentações" />
+      <Metric label="Saldo comprometido" value={<MoneyDisplay value={wallet.data.reservedCents} />} note="Reservado em lotes ativos" />
+      <Metric label="Disponível para lances" value={<MoneyDisplay value={wallet.data.availableCents} />} note="Pode ser utilizado agora" accent />
+    </div>
+    <div className="content-grid">
+      <Card>
+        <h3>Movimentações recentes</h3>
+        {transactions.error
+          ? <StatusMessage kind="warning">{transactions.error}</StatusMessage>
+          : !transactions.data
+            ? <LoadingState label="Carregando movimentações…" />
+            : transactions.data.data.length
+              ? <>
+                  <div className="line-list">{transactions.data.data.map((row) => {
+                    const presentation = walletTransactionPresentation(row.type, row.amountCents);
+                    return <div className={`line-row wallet-transaction wallet-transaction-${presentation.direction}`} key={row.id}>
+                      <div>
+                        <strong>{presentation.label}</strong>
+                        <small>{row.lotTitle ? `${row.lotTitle} · ${presentation.detail}` : presentation.detail}</small>
+                        <small>{formatAuctionDateTime(row.createdAt)}</small>
+                        {row.receiptToken && <Link className="transaction-receipt" to={`/receipts/${row.receiptToken}`}>Ver comprovante →</Link>}
+                      </div>
+                      <span className="transaction-amount" aria-label={`${presentation.direction === "debit" ? "Débito" : "Crédito"} de ${money(presentation.absoluteCents)}`}>
+                        <span aria-hidden="true">{presentation.sign}</span><MoneyDisplay value={presentation.absoluteCents} />
+                      </span>
+                    </div>;
+                  })}</div>
+                  <Pagination
+                    page={transactions.data.meta.page}
+                    totalPages={transactions.data.meta.totalPages}
+                    total={transactions.data.meta.total}
+                    onPageChange={setTransactionPage}
+                    label="Paginação das movimentações"
+                  />
+                </>
+              : <EmptyState title="Sem movimentações" description="Suas operações aparecerão aqui." />}
+      </Card>
+      <Card className="wallet-deposit-card">
+        <h3>Adicionar saldo</h3>
+        <p>Esta é uma simulação financeira; nenhum pagamento real será realizado.</p>
+        <form onSubmit={deposit}>
+          <FormField label="Valor do depósito" htmlFor="amount" hint="Mínimo R$ 1,00 · Máximo R$ 10.000,00">
+            <MoneyInput id="amount" valueCents={depositCents} onValueChange={setDepositCents} required />
+          </FormField>
+          <Button className="full" loading={busy}>Simular depósito</Button>
+        </form>
+      </Card>
+    </div>
+  </Page>;
+}
 
 type AuctioneerSummary = { total: number; live: number; receivedCents: string };
 
