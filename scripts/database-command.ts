@@ -22,7 +22,7 @@ if (!args) throw new Error("Comando de banco invalido. Use migrate ou seed.");
 
 const requestedTarget = process.argv[3] ?? "development";
 if (!(requestedTarget in DATABASE_NAMES)) {
-  throw new Error("Ambiente de banco invalido. Use development, test ou e2e.");
+  throw new Error("Ambiente de banco invalido. Use development, test, e2e ou production.");
 }
 const target = requestedTarget as DatabaseTarget;
 if (action === "seed" && target !== "development") {
@@ -33,7 +33,9 @@ const variable = target === "development"
   ? "DATABASE_URL"
   : target === "test"
     ? "TEST_DATABASE_URL"
-    : "E2E_DATABASE_URL";
+    : target === "e2e"
+      ? "E2E_DATABASE_URL"
+      : "DATABASE_URL";
 const connectionString = process.env[variable];
 if (!connectionString) throw new Error(`${variable} e obrigatoria para operacoes de banco.`);
 assertDatabaseUrl(connectionString, target, variable);

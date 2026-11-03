@@ -28,6 +28,10 @@ if (!parsed.success) {
   throw new Error(`Configuracao invalida: ${z.prettifyError(parsed.error)}`);
 }
 
+const PRODUCTION_ORIGIN = "https://leilao.figueiredo.tech";
+const PRODUCTION_DATABASE = "auction_house_leilao_prod";
+const EXAMPLE_SESSION_SECRET = "generate-a-new-secret-with-at-least-32-random-characters";
+
 function requireDatabase(value: string, expected: string, label: string) {
   let target: URL;
   try {
@@ -45,9 +49,12 @@ function requireDatabase(value: string, expected: string, label: string) {
   return value;
 }
 
-const developmentUrl = requireDatabase(
+const primaryDatabase = parsed.data.NODE_ENV === "production"
+  ? PRODUCTION_DATABASE
+  : "auction_house_entregavel_dev";
+const primaryUrl = requireDatabase(
   parsed.data.DATABASE_URL,
-  "auction_house_entregavel_dev",
+  primaryDatabase,
   "DATABASE_URL"
 );
 const testUrl = parsed.data.TEST_DATABASE_URL
@@ -63,17 +70,28 @@ if (parsed.data.NODE_ENV === "test" && !testUrl) {
 if (parsed.data.NODE_ENV === "e2e" && !e2eUrl) {
   throw new Error("E2E_DATABASE_URL e obrigatoria nos testes E2E.");
 }
+if (parsed.data.NODE_ENV === "production") {
+  if (parsed.data.APP_ORIGIN !== PRODUCTION_ORIGIN) {
+    throw new Error(`APP_ORIGIN deve ser exatamente ${PRODUCTION_ORIGIN} em producao.`);
+  }
+  if (parsed.data.PORT !== 3300) {
+    throw new Error("PORT deve ser 3300 em producao.");
+  }
+  if (parsed.data.SESSION_SECRET === EXAMPLE_SESSION_SECRET) {
+    throw new Error("SESSION_SECRET de exemplo nao pode ser usado em producao.");
+  }
+}
 
-const configuredUrls = [developmentUrl, testUrl, e2eUrl].filter((value): value is string => Boolean(value));
+const configuredUrls = [primaryUrl, testUrl, e2eUrl].filter((value): value is string => Boolean(value));
 if (new Set(configuredUrls).size !== configuredUrls.length) {
-  throw new Error("Os bancos de desenvolvimento, integracao e E2E devem ser distintos.");
+  throw new Error("Os bancos configurados para cada ambiente devem ser distintos.");
 }
 
 const databaseUrl = parsed.data.NODE_ENV === "test"
   ? testUrl!
   : parsed.data.NODE_ENV === "e2e"
     ? e2eUrl!
-    : developmentUrl;
+    : primaryUrl;
 
 function localDirectory(value: string, label: string) {
   const target = resolve(projectRoot, value);
@@ -85,7 +103,7 @@ function localDirectory(value: string, label: string) {
 
 export const env = {
   ...parsed.data,
-  DATABASE_URL: developmentUrl,
+  DATABASE_URL: primaryUrl,
   TEST_DATABASE_URL: testUrl,
   E2E_DATABASE_URL: e2eUrl,
   databaseUrl,

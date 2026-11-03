@@ -5,6 +5,14 @@ import { createLot } from "../apps/api/src/modules/lots/lots.service.ts";
 import { depositFunds } from "../apps/api/src/modules/wallets/wallets.service.ts";
 import { placeBid } from "../apps/api/src/modules/bids/bids.service.ts";
 import { settleLot } from "../apps/api/src/modules/auctions/settlement.service.ts";
+import { env } from "../apps/api/src/config/env.ts";
+import { confirmActiveDatabase } from "../scripts/database-safety.ts";
+
+if (env.NODE_ENV === "production") {
+  throw new Error("O seed demonstrativo e proibido em producao.");
+}
+
+await confirmActiveDatabase(env.databaseUrl, env.NODE_ENV);
 
 const password = await hashPassword("Demo1234!");
 

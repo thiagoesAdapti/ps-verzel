@@ -11,7 +11,21 @@ const target: DatabaseTarget = process.env.NODE_ENV === "test"
   ? "test"
   : process.env.NODE_ENV === "e2e"
     ? "e2e"
-    : "development";
+    : process.env.NODE_ENV === "production"
+      ? "production"
+      : "development";
+
+const prismaCommand = process.argv.slice(2).join(" ");
+if (
+  target === "production" &&
+  ["migrate reset", "migrate dev", "db push", "db seed"].some((command) =>
+    prismaCommand.includes(command)
+  )
+) {
+  throw new Error(
+    "Comando Prisma destrutivo ou demonstrativo bloqueado em producao. Use somente prisma migrate deploy pelo script protegido."
+  );
+}
 const databaseUrl = assertDatabaseUrl(requiredEnv("DATABASE_URL"), target);
 
 export default defineConfig({

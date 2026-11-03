@@ -3,7 +3,8 @@ import { Client } from "pg";
 export const DATABASE_NAMES = {
   development: "auction_house_entregavel_dev",
   test: "auction_house_entregavel_test",
-  e2e: "auction_house_entregavel_e2e"
+  e2e: "auction_house_entregavel_e2e",
+  production: "auction_house_leilao_prod"
 } as const;
 
 export type DatabaseTarget = keyof typeof DATABASE_NAMES;
