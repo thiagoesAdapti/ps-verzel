@@ -1,96 +1,141 @@
 # Casa de Leilões Online
 
-Aplicação full stack para leilões de livros, reconstruída localmente para o desafio Elite Dev da Verzel. Leiloeiros pesquisam obras na Open Library e publicam lotes; licitantes usam uma carteira simulada, disputam em tempo real e consultam arremates e comprovantes públicos. O histórico de lances é verificável por cadeia SHA-256, assinaturas Ed25519 e um ledger JSONL independente do PostgreSQL.
+Plataforma web de leilões de livros desenvolvida para o desafio técnico **Elite Dev — Verzel**. O sistema permite que leiloeiros publiquem lotes a partir do catálogo da Open Library e que licitantes participem de disputas em tempo real utilizando uma carteira financeira simulada.
 
-Este repositório é uma reconstrução retrospectiva da implementação funcional. Seus commits foram organizados em uma sequência técnica incremental e coerente; eles não representam a cronologia histórica original do desenvolvimento.
+O projeto também oferece histórico público de lances, comprovantes de arrematação e mecanismos de auditoria capazes de identificar divergências entre os registros do PostgreSQL e um histórico independente assinado criptograficamente.
+
+> **Ambiente de demonstração:** os depósitos e valores negociados são fictícios. Nenhuma transação financeira real é realizada.
 
 ## Funcionalidades
 
-- Cadastro, login, sessão por cookie seguro e autorização por papel.
-- Pesquisa bibliográfica na Open Library e armazenamento local de capas.
-- Criação, agendamento, publicação e cancelamento protegido de lotes.
-- Vitrine pública com filtros, paginação e sala de leilão responsiva.
-- Lances transacionais com idempotência, locks, reservas financeiras e prorrogação automática.
-- Atualizações por Socket.IO com ressincronização HTTP após reconexão.
-- Scheduler local, recuperação de operações pendentes e liquidação idempotente.
-- Carteira simulada, extrato, participações, vitórias e comprovantes públicos sem dados pessoais.
-- Auditoria pública com detecção de adulteração no banco ou no ledger.
+**Leiloeiro**
+
+- Pesquisa de livros na Open Library, com importação dos dados bibliográficos e armazenamento local das capas.
+- Criação de lotes com descrição do exemplar, estado de conservação, lance inicial, incremento mínimo e período de disputa.
+- Publicação imediata ou agendada, acompanhamento dos próprios lotes e cancelamento permitido somente antes do primeiro lance.
+- Consulta de lances, encerramentos e valores recebidos após a liquidação.
+
+**Licitante**
+
+- Cadastro, autenticação e acesso às funcionalidades conforme o perfil.
+- Vitrine pública com filtros por situação e paginação.
+- Sala de leilão com histórico, contagem regressiva e atualização de lances em tempo real.
+- Depósitos simulados e carteira com saldo total, reservado e disponível.
+- Acompanhamento das disputas, identificação de liderança e consulta aos arremates.
+- Comprovantes públicos compartilháveis, sem exposição de dados pessoais.
+
+**Regras de negócio e confiabilidade**
+
+- Validação transacional dos lances, com incremento mínimo e prevenção de lances inválidos.
+- Reserva do saldo do maior licitante e liberação da reserva anterior ao ser superado.
+- Proteção contra concorrência, repetição de requisições e operações duplicadas.
+- Prorrogação automática quando um lance é aceito nos dois minutos finais.
+- Encerramento automatizado dos lotes, liquidação idempotente e recuperação de operações pendentes.
+- Auditoria pública da integridade dos lances e dos registros do lote.
 
 ## Tecnologias
 
-- Node.js 24, TypeScript 7 e npm workspaces.
-- React 19, Vite 8, React Router 7 e Tailwind CSS 4.
-- Express 5, Prisma ORM 7.10.1, `@prisma/adapter-pg` e PostgreSQL 18.
-- Socket.IO 4, Zod 4, Vitest 5, Supertest e Playwright 1.64.
+| Camada | Tecnologias |
+|---|---|
+| Front-end | React 19, TypeScript, Vite 8, React Router 7, Tailwind CSS 4 |
+| Back-end | Node.js 24, Express 5, TypeScript, Zod 4 |
+| Banco de dados | PostgreSQL 18, Prisma ORM 7 e `@prisma/adapter-pg` |
+| Tempo real | Socket.IO 4 |
+| Catálogo externo | Open Library |
+| Testes | Vitest, Supertest e Playwright |
+| Organização | Monorepo com npm workspaces |
 
-## Estrutura
+## Estrutura do projeto
 
 ```text
-apps/api/       API Express, domínio, scheduler, recuperação e Socket.IO
-apps/web/       aplicação React, componentes, testes e fluxos Playwright
-prisma/         schema, migration inicial e seed idempotente
-scripts/        segurança de banco, chaves, E2E e smoke externo
-data/covers/    capas locais geradas em execução; conteúdo ignorado pelo Git
-data/audit/     ledgers e âncoras locais; conteúdo ignorado pelo Git
+apps/
+  api/            API REST, serviços de domínio, auditoria e Socket.IO
+  web/            aplicação React, componentes e testes E2E
+prisma/           schema, migrations e seed
+scripts/          preparação de ambiente, testes e verificações de segurança
+data/covers/      capas persistidas localmente durante a execução
+data/audit/       registros de auditoria e âncoras locais
 ```
 
-A documentação operacional está concentrada neste README. Documentos internos de Kanban, roadmap e gestão não fazem parte do entregável.
+Os arquivos operacionais gerados em `data/`, os segredos e as credenciais não são versionados.
 
-## Pré-requisitos no Windows
+## Pré-requisitos
 
 - Node.js 24 LTS e npm 11.
-- PostgreSQL 18 instalado nativamente.
-- Microsoft Edge instalado para os testes E2E.
-- Git com a identidade real do colaborador configurada.
+- PostgreSQL 18.
+- Microsoft Edge para a execução dos testes E2E conforme a configuração atual.
+- Acesso à internet para pesquisar novos livros na Open Library.
 
-O projeto não depende de Docker, WSL, Redis ou serviços pagos. A reconstrução foi validada com Node.js 24.20.0, npm 11.19.0 e PostgreSQL 18.6.
+O desenvolvimento local não exige Docker, WSL, Redis ou serviços pagos.
 
-## Bancos exclusivos
+## Instalação e configuração local
 
-Este repositório recusa os bancos do projeto de origem. Crie um usuário e três bancos exclusivos, ajustando apenas a senha local:
+Os exemplos a seguir utilizam **PowerShell no Windows**, na raiz do repositório.
+
+### 1. Instalar as dependências
+
+```powershell
+npm install
+```
+
+### 2. Criar os bancos PostgreSQL
+
+A aplicação utiliza três bancos independentes, separando desenvolvimento, testes de integração e testes E2E.
+
+Conecte-se ao PostgreSQL com um usuário administrador, utilizando `psql`, e crie o usuário da aplicação:
 
 ```sql
-CREATE ROLE auction_entregavel WITH LOGIN PASSWORD 'SUA_SENHA_LOCAL';
+CREATE ROLE auction_entregavel LOGIN;
+```
+
+No próprio `psql`, defina a senha de maneira interativa:
+
+```text
+\password auction_entregavel
+```
+
+Crie os bancos:
+
+```sql
 CREATE DATABASE auction_house_entregavel_dev OWNER auction_entregavel;
 CREATE DATABASE auction_house_entregavel_test OWNER auction_entregavel;
 CREATE DATABASE auction_house_entregavel_e2e OWNER auction_entregavel;
+
 ALTER DATABASE auction_house_entregavel_dev SET timezone TO 'UTC';
 ALTER DATABASE auction_house_entregavel_test SET timezone TO 'UTC';
 ALTER DATABASE auction_house_entregavel_e2e SET timezone TO 'UTC';
 ```
 
-Se o usuário ou os bancos já existirem, não os recrie nem faça reset. Garanta somente que `auction_entregavel` tenha permissões para migrations nos três bancos e que o timezone seja UTC.
+Caso o usuário ou algum banco já exista, não recrie nem apague dados existentes. A configuração atual valida explicitamente os nomes permitidos e consulta `SELECT current_database()` antes de operações potencialmente destrutivas.
 
-As proteções conferem o nome na URL e executam `SELECT current_database()` antes de migrations, seeds, truncamentos ou limpeza de fixtures. Uma divergência encerra a operação imediatamente. Não há fallback para nomes de banco do projeto original.
-
-## Configuração
-
-Instale as dependências e crie o arquivo local de ambiente:
+### 3. Configurar as variáveis de ambiente
 
 ```powershell
-npm install
 Copy-Item .env.example .env
 ```
 
-Edite apenas as credenciais PostgreSQL e o e-mail de contato em `.env`. Depois gere um novo segredo de sessão e um novo par Ed25519 diretamente no arquivo ignorado pelo Git:
+Edite o arquivo `.env` com as credenciais dos três bancos e o e-mail de contato utilizado na integração com a Open Library. As principais variáveis são:
+
+| Variável | Finalidade |
+|---|---|
+| `DATABASE_URL` | Banco de desenvolvimento |
+| `TEST_DATABASE_URL` | Banco de testes de integração |
+| `E2E_DATABASE_URL` | Banco exclusivo de testes E2E |
+| `SESSION_SECRET` | Segredo de assinatura da sessão |
+| `AUDIT_PRIVATE_KEY` e `AUDIT_PUBLIC_KEY` | Par de chaves Ed25519 para auditoria |
+| `AUDIT_ANCHOR_DIR` | Diretório local das evidências de auditoria |
+| `COVER_STORAGE_DIR` | Diretório local das capas importadas |
+| `OPEN_LIBRARY_CONTACT_EMAIL` | Contato informado no `User-Agent` da integração |
+
+Gere o segredo da sessão e o par de chaves da auditoria:
 
 ```powershell
 npm run config:secrets
 ```
 
-Variáveis principais:
+**Não publique o `.env` nem as chaves privadas.** Se a senha do PostgreSQL contiver caracteres especiais, utilize a codificação adequada nas URLs de conexão.
 
-- `DATABASE_URL`: exclusivamente `auction_house_entregavel_dev`.
-- `TEST_DATABASE_URL`: exclusivamente `auction_house_entregavel_test`.
-- `E2E_DATABASE_URL`: exclusivamente `auction_house_entregavel_e2e`; é obrigatória e não possui fallback.
-- `SESSION_SECRET`: segredo aleatório com no mínimo 32 caracteres.
-- `AUDIT_PRIVATE_KEY` e `AUDIT_PUBLIC_KEY`: par Ed25519 exclusivo deste ambiente.
-- `AUDIT_ANCHOR_DIR` e `COVER_STORAGE_DIR`: caminhos relativos mantidos dentro do repositório.
-- `OPEN_LIBRARY_CONTACT_EMAIL`: contato enviado no `User-Agent` da integração real.
-
-Nunca versione `.env`, chave privada, sessões, bancos, capas geradas, ledgers, âncoras ou assinaturas locais.
-
-## Preparar o banco de desenvolvimento
+### 4. Preparar o banco de desenvolvimento
 
 ```powershell
 npm run db:generate
@@ -98,44 +143,40 @@ npm run db:migrate
 npm run db:seed
 ```
 
-`db:migrate` confirma o banco conectado antes de executar `prisma migrate deploy`. `db:seed` só aceita o banco de desenvolvimento e cria um cenário idempotente com lotes agendado, ao vivo e encerrado.
+O seed é idempotente e cria contas demonstrativas e lotes em diferentes situações.
 
-Para preparar o banco de integração uma vez:
-
-```powershell
-npm run db:migrate:test
-```
-
-O banco E2E é migrado e preparado automaticamente por `npm run test:e2e`.
-
-### Contas demonstrativas
-
-| Papel | E-mail | Senha somente para demonstração local |
-|---|---|---|
-| Leiloeiro | `leiloeiro@casadeleiloes.local` | `Demo1234!` |
-| Licitante | `licitante1@casadeleiloes.local` | `Demo1234!` |
-| Licitante | `licitante2@casadeleiloes.local` | `Demo1234!` |
-
-Essas credenciais são dados de fixture, não credenciais reais ou de produção.
-
-## Executar localmente
+### 5. Iniciar a aplicação
 
 ```powershell
 npm run dev
 ```
 
-- Interface: <http://localhost:5373>
-- API: <http://localhost:3300>
-- Saúde: <http://localhost:3300/api/health>
+| Serviço | Endereço local |
+|---|---|
+| Interface web | http://localhost:5373 |
+| API | http://localhost:3300 |
+| Health check | http://localhost:3300/api/health |
 
-Para executar a API compilada:
+Para gerar a versão compilada e executar a API:
 
 ```powershell
 npm run build
 npm start
 ```
 
-## Testes e qualidade
+## Acessos de demonstração
+
+Após executar o seed, utilize as seguintes contas **exclusivamente em ambiente local**:
+
+| Perfil | E-mail | Senha |
+|---|---|---|
+| Leiloeiro | `leiloeiro@casadeleiloes.local` | `Demo1234!` |
+| Licitante 1 | `licitante1@casadeleiloes.local` | `Demo1234!` |
+| Licitante 2 | `licitante2@casadeleiloes.local` | `Demo1234!` |
+
+Esses acessos são fictícios e não devem ser utilizados em produção.
+
+## Testes
 
 ```powershell
 npm run typecheck
@@ -143,56 +184,68 @@ npm test
 npm run test:integration
 npm run test:e2e
 npm run build
+```
+
+A suíte automatizada contém **113 testes aprovados**:
+
+| Categoria | Testes |
+|---|---:|
+| Unitários da API | 29 |
+| Componentes web | 30 |
+| Integração com PostgreSQL | 49 |
+| E2E no Microsoft Edge | 5 |
+| **Total** | **113** |
+
+Os testes de integração utilizam um banco separado. O Playwright executa a aplicação e a API em portas próprias, com PostgreSQL e navegador reais. Apenas as respostas da Open Library são controladas por um serviço local durante os cenários determinísticos.
+
+Para testar separadamente a integração com a API pública real da Open Library:
+
+```powershell
 npm run test:external:open-library
 ```
 
-A suíte determinística validada contém 113 testes:
+Essa verificação depende de conectividade e não integra a contagem dos 113 testes.
 
-- 29 testes unitários da API em 8 arquivos.
-- 30 testes de componentes web em 10 arquivos.
-- 49 testes de integração com PostgreSQL em 19 arquivos.
-- 5 fluxos E2E no Microsoft Edge.
+## Decisões de arquitetura
 
-Os testes de integração usam somente `auction_house_entregavel_test`, diretórios próprios de capas/auditoria e confirmação do banco ativo antes de `TRUNCATE`.
+### Integridade dos lances e saldos
 
-O E2E usa somente:
+Valores monetários são armazenados em centavos, utilizando `BIGINT` no PostgreSQL. Os contratos JSON expõem os valores como strings para evitar perda de precisão.
 
-- banco `auction_house_entregavel_e2e`;
-- API `3310`;
-- Vite `5374`;
-- stub local da Open Library `3311`;
-- `data/covers/e2e` e `data/audit/anchors/e2e`.
+Os lances são processados em transações com bloqueios de linha (`SELECT ... FOR UPDATE`), validações de saldo e regras de incremento. A reserva financeira do licitante anterior é liberada na mesma transação em que o novo líder é estabelecido.
 
-O Playwright não reutiliza servidores existentes. Navegador, Vite, API, PostgreSQL, download local da capa e filesystem são reais; somente a Open Library é controlada pelo stub determinístico. `npm run test:external:open-library` consulta a Open Library real separadamente e exige internet. Esse smoke não integra a contagem de 113 testes e nunca deve ser declarado aprovado sem execução efetiva.
+Depósitos, lances e liquidações usam controles de idempotência para impedir processamento duplicado.
 
-## Arquitetura e invariantes
+### Atualizações em tempo real
 
-Valores financeiros usam `BIGINT` em centavos no PostgreSQL e strings nos contratos JSON. Um lance reserva o valor integral do líder e libera a reserva anterior na mesma transação. Locks `SELECT ... FOR UPDATE`, ordem determinística de bloqueios e constraints do banco protegem concorrência e saldos.
+O Socket.IO notifica os clientes sobre mudanças na disputa, enquanto o PostgreSQL e o relógio do servidor permanecem como fontes oficiais do estado. Após uma reconexão, a interface consulta novamente a API para sincronização.
 
-Depósitos, lances e liquidações são idempotentes. Socket.IO transporta notificações, mas PostgreSQL e o relógio do servidor são as fontes da verdade. Após reconexão, a interface refaz consultas HTTP para recuperar o estado canônico.
+### Encerramento e recuperação
 
-O scheduler inicia lotes vencidos, encerra leilões e liquida resultados. Na inicialização, a API verifica o banco, recupera operações de auditoria pendentes e executa um ciclo antes de aceitar tráfego.
+Um scheduler acompanha o início e o encerramento dos lotes, realiza a liquidação dos resultados e ajuda a recuperar operações pendentes após reinicializações.
 
-## Auditoria
+### Auditoria pública
 
-Cada lote recebe registros `GENESIS_PREPARE` e `GENESIS_COMMIT`. Lances usam serialização canônica, cadeia SHA-256, assinaturas Ed25519 e eventos `BID_PREPARE`, `BID_COMMIT` ou `ABORT` no ledger local.
+O sistema combina serialização canônica, encadeamento SHA-256, assinaturas Ed25519 e um ledger JSONL independente do banco relacional. A verificação compara a sequência de eventos e os registros persistidos no PostgreSQL.
 
-A verificação pública compara o ledger inteiro com o PostgreSQL, incluindo genesis, assinaturas, encadeamento, sequência e quantidade de lances:
+Os resultados possíveis são:
 
-- `INTEGRO`: as provas completas correspondem.
-- `ADULTERADO`: existe divergência comprovada.
-- `INCONCLUSIVO`: faltam evidências ou há operação pendente/inacessível.
+- `INTEGRO`: registros e provas verificadas correspondem.
+- `ADULTERADO`: foi identificada uma divergência comprovada.
+- `INCONCLUSIVO`: não há evidências suficientes para afirmar a integridade.
 
-O filesystem local não é fisicamente imutável. O modelo detecta adulteração direta do banco por um agente sem acesso simultâneo ao ledger e à chave privada; comprometimento conjunto desses três recursos está fora da garantia local.
+A proteção foi projetada para detectar alterações diretas no banco sem acesso simultâneo ao ledger e à chave privada. Ela não equivale a armazenamento fisicamente imutável nem protege contra o comprometimento conjunto desses recursos.
 
-## Limitações e estado de entrega
+## Escopo e limitações
 
-- A carteira e os depósitos são simulações; não há pagamento real.
-- A pesquisa de novos livros depende da Open Library, mas lotes já importados continuam locais.
-- O scheduler foi projetado para um único processo Node.js local.
-- A homologação automatizada passou, mas validações manuais em navegadores distintos, dispositivo físico e leitor de tela permanecem pendentes.
-- VPS, domínio, HTTPS, armazenamento imutável, observabilidade e deploy público não foram configurados. Funcionamento local não significa prontidão de produção.
+- Os depósitos e pagamentos são simulados; não ocorre movimentação financeira real.
+- A busca de novos livros depende da disponibilidade da Open Library. Os lotes já importados permanecem acessíveis localmente.
+- O scheduler foi projetado para um único processo da API neste ambiente.
+- Os testes automatizados foram executados; a homologação manual em navegadores distintos, dispositivo físico e leitor de tela permanece uma etapa adicional.
+- O ambiente descrito neste README é local. A disponibilização pública exige configuração própria de infraestrutura, HTTPS, segredos e persistência adequada.
 
 ## Uso de inteligência artificial
 
-O projeto e esta reconstrução utilizaram assistência do Codex/OpenAI para análise, transporte incremental, geração e revisão de código, testes e documentação. A classificação hipotética de responsabilidades do planejamento não representa autoria histórica humana. Os commits registram a autoria e as datas reais do Git, e sua sequência é explicitamente retrospectiva. A assistência de IA não substitui revisão técnica, homologação manual ou responsabilidade sobre uma implantação futura.
+Ferramentas de inteligência artificial, incluindo o Codex, foram utilizadas como apoio à análise de requisitos, ao planejamento técnico, à implementação e revisão de código, à elaboração de testes e à documentação.
+
+O uso dessas ferramentas foi acompanhado de critérios de aceite, verificações automatizadas e revisão das regras de negócio, especialmente nas operações de lances, carteira e auditoria.
