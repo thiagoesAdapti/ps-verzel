@@ -634,6 +634,140 @@ export function ReceiptPage() {
   </div>;
 }
 
+type AuditStatus = "INTEGRO" | "ADULTERADO" | "INCONCLUSIVO";
+
+export function auditCheckResults(status: AuditStatus) {
+  if (status === "INTEGRO") {
+    return { tone: "success", integrity: "Validada", sequence: "Validada", signatures: "Validas" } as const;
+  }
+  if (status === "ADULTERADO") {
+    return {
+      tone: "error",
+      integrity: "Com divergencia",
+      sequence: "Nao confirmada",
+      signatures: "Nao confirmadas"
+    } as const;
+  }
+  return {
+    tone: "warning",
+    integrity: "Nao concluida",
+    sequence: "Nao concluida",
+    signatures: "Nao concluidas"
+  } as const;
+}
+
+type Audit = {
+  lotId: string;
+  status: AuditStatus;
+  bidCount: number;
+  verifiedAt: string;
+  message: string;
+  bids: Array<{
+    sequence: number;
+    participant: string;
+    amountCents: string;
+    acceptedAt: string;
+  }>;
+};
+
+export function AuditPage() {
+  const { id = "" } = useParams();
+  const audit = useData(() => api<Audit>(`/lots/${id}/audit`), [id]);
+  const lot = useData(() => api<Pick<Lot, "title" | "authors">>(`/lots/${id}`), [id]);
+  if (audit.error || lot.error) {
+    return <Page title="Auditoria de lances">
+      <ErrorState
+        message={audit.error || lot.error}
+        retry={() => {
+          void audit.refresh();
+          void lot.refresh();
+        }}
+      />
+    </Page>;
+  }
+  if (!audit.data || !lot.data) return <LoadingState />;
+  const item = audit.data;
+  const kind = item.status === "INTEGRO"
+    ? "success"
+    : item.status === "ADULTERADO" ? "error" : "warning";
+  const checks = auditCheckResults(item.status);
+  const resultLabel = item.status === "INTEGRO"
+    ? "Integro"
+    : item.status === "ADULTERADO" ? "Divergencia encontrada" : "Verificacao inconclusiva";
+  const resultTitle = item.status === "INTEGRO"
+    ? "Historico integro"
+    : item.status === "ADULTERADO"
+      ? "Foi identificada uma divergencia no historico"
+      : "Nao foi possivel concluir a verificacao";
+  const explanation = item.status !== "INTEGRO"
+    ? item.message
+    : item.bidCount === 0
+      ? "O lote ainda nao possui lances. Os dados iniciais e o historico independente foram verificados sem divergencias."
+      : `Os ${item.bidCount} lance${item.bidCount === 1 ? "" : "s"} registrado${item.bidCount === 1 ? "" : "s"} correspondem ao historico independente e passaram pelas validacoes de integridade, sequencia e assinatura.`;
+
+  return <Page
+    eyebrow={`Historico publico - Lote ${id.slice(0, 8)}`}
+    title="Auditoria de lances"
+    description={`${lot.data.title} - ${lot.data.authors.join(", ")}`}
+  >
+    <StatusMessage kind={kind}>
+      <div><strong>{resultTitle}</strong><p>{explanation}</p></div>
+    </StatusMessage>
+    <div className="content-grid audit-grid">
+      <Card>
+        <div className="card-heading">
+          <h3>Historico completo</h3>
+          <Link to={`/lots/${id}`}>Ver leilao -&gt;</Link>
+        </div>
+        {item.bids.length
+          ? <div className="table-wrap"><table>
+              <thead><tr><th>Seq.</th><th>Participante</th><th>Valor</th><th>Horario</th></tr></thead>
+              <tbody>{item.bids.map((bid) => <tr key={bid.sequence}>
+                <td>{String(bid.sequence).padStart(3, "0")}</td>
+                <td>{bid.participant}</td>
+                <td><MoneyDisplay value={bid.amountCents} /></td>
+                <td>{new Date(bid.acceptedAt).toLocaleString("pt-BR")}</td>
+              </tr>)}</tbody>
+            </table></div>
+          : <EmptyState
+              title="Historico vazio"
+              description="O lote ainda nao possui lances confirmados."
+            />}
+      </Card>
+      <Card className="audit-summary-card">
+        <h3>Resumo da verificacao</h3>
+        <div className="line-list">
+          <div className="line-row"><span>Lances verificados</span><strong>{item.bidCount}</strong></div>
+          <div className="line-row">
+            <span>Verificado em</span>
+            <strong>{new Date(item.verifiedAt).toLocaleString("pt-BR")}</strong>
+          </div>
+        </div>
+        <details className="audit-technical-details">
+          <summary>Ver detalhes tecnicos</summary>
+          <div className="audit-technical-content">
+            <p>Resultado geral: <strong>{resultLabel}</strong></p>
+            <ul className="audit-check-list">
+              <li>
+                <span>Integridade dos registros</span>
+                <strong className={`audit-check-result-${checks.tone}`}>{checks.integrity}</strong>
+              </li>
+              <li>
+                <span>Sequencia dos lances</span>
+                <strong className={`audit-check-result-${checks.tone}`}>{checks.sequence}</strong>
+              </li>
+              <li>
+                <span>Assinaturas criptograficas</span>
+                <strong className={`audit-check-result-${checks.tone}`}>{checks.signatures}</strong>
+              </li>
+            </ul>
+          </div>
+        </details>
+      </Card>
+    </div>
+  </Page>;
+}
+
 type AuctioneerSummary = { total: number; live: number; receivedCents: string };
 
 export function isLotCancellable(

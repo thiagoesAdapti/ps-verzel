@@ -271,6 +271,19 @@ td a { color: #0f766e; font-weight: 750; }
 .receipt-total { margin: 20px 0; padding: 20px; text-align: center; background: #e8f5f1; border-radius: 10px; }
 .receipt-total > span { display: block; color: #64748b; font-size: 11px; text-transform: uppercase; }
 .receipt-total .money-large { display: block; margin: 6px 0 0; color: #0f172a; font-size: clamp(34px, 6vw, 44px); line-height: 1.05; }
+.audit-grid { grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr); align-items: start; }
+.audit-summary-card { align-self: start; }
+.audit-technical-details { margin-top: 18px; padding-top: 15px; border-top: 1px solid #e2e8f0; }
+.audit-technical-details summary { color: #0f766e; font-size: 12px; font-weight: 750; cursor: pointer; }
+.audit-technical-content { margin-top: 14px; color: #475569; font-size: 11px; }
+.audit-technical-content > p strong { color: #0f172a; }
+.audit-check-list { display: grid; gap: 0; margin: 12px 0 0; padding: 0; list-style: none; }
+.audit-check-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid #e2e8f0; }
+.audit-check-list li:last-child { padding-bottom: 0; border-bottom: 0; }
+.audit-check-list strong { text-align: right; }
+.audit-check-result-success { color: #15803d; }
+.audit-check-result-error { color: #b91c1c; }
+.audit-check-result-warning { color: #b45309; }
 
 @media (min-width: 801px) {
   .steps { position: sticky; z-index: 20; top: var(--header-height); }
@@ -295,7 +308,7 @@ td a { color: #0f766e; font-weight: 750; }
   .page { padding: 26px 16px 50px; }
   .page-header { align-items: flex-start; flex-direction: column; }
   .lot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .room-grid, .content-grid { grid-template-columns: 1fr; }
+  .room-grid, .content-grid, .audit-grid { grid-template-columns: 1fr; }
   .create-grid { grid-template-columns: 1fr; }
   .metrics { grid-template-columns: 1fr; }
   .preview { position: static; }
