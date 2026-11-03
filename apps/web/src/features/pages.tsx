@@ -477,6 +477,90 @@ export function WalletPage() {
   </Page>;
 }
 
+type Participation = {
+  lotId: string;
+  title: string;
+  coverUrl: string | null;
+  status: string;
+  highestBidCents: string | null;
+  isLeading: boolean;
+  won: boolean;
+  finalAmountCents: string | null;
+  receiptToken: string | null;
+};
+
+type ParticipationSummary = { total: number; leading: number; won: number };
+
+export function participationBadgeStatus(
+  item: Pick<Participation, "won" | "isLeading" | "status">
+) {
+  if (item.won) return "WON";
+  if (item.isLeading) return "LEADING";
+  return item.status === "LIVE" ? "OUTBID" : "ENDED";
+}
+
+export function MyAuctionsPage() {
+  const [page, setPage] = useState(1);
+  const items = useData(
+    () => apiPage<Participation[], ParticipationSummary>(`/my/participations?page=${page}&limit=12`),
+    [page]
+  );
+  useEffect(() => {
+    if (items.data && page > Math.max(1, items.data.meta.totalPages)) {
+      setPage(Math.max(1, items.data.meta.totalPages));
+    }
+  }, [items.data, page]);
+  if (items.error) {
+    return <Page title="Meus arremates"><ErrorState message={items.error} retry={items.refresh} /></Page>;
+  }
+  if (!items.data) return <LoadingState />;
+  const summary = items.data.summary ?? {
+    total: items.data.meta.total,
+    leading: 0,
+    won: 0
+  };
+  return <Page
+    eyebrow="Sua conta"
+    title="Meus arremates"
+    description="Acompanhe suas disputas, vitorias e comprovantes."
+  >
+    <div className="metrics">
+      <Metric label="Participacoes" value={summary.total} note="Lotes com lances" />
+      <Metric label="Liderando" value={summary.leading} note="Disputas em andamento" />
+      <Metric label="Arrematados" value={summary.won} note="Comprovantes disponiveis" />
+    </div>
+    <Card className="table-card">
+      {items.data.data.length
+        ? <>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Lote</th><th>Situacao</th><th>Meu maior lance</th><th>Proximo passo</th></tr></thead>
+                <tbody>{items.data.data.map((item) => <tr key={item.lotId}>
+                  <td><strong>{item.title}</strong></td>
+                  <td><Badge status={participationBadgeStatus(item)} /></td>
+                  <td><MoneyDisplay value={item.highestBidCents} /></td>
+                  <td>{item.receiptToken
+                    ? <Link to={`/receipts/${item.receiptToken}`}>Comprovante -&gt;</Link>
+                    : <Link to={`/lots/${item.lotId}`}>Ver lote -&gt;</Link>}</td>
+                </tr>)}</tbody>
+              </table>
+            </div>
+            <Pagination
+              page={items.data.meta.page}
+              totalPages={items.data.meta.totalPages}
+              total={items.data.meta.total}
+              onPageChange={setPage}
+              label="Paginacao das participacoes"
+            />
+          </>
+        : <EmptyState
+            title="Nenhuma participacao"
+            description="Quando voce der seu primeiro lance, o lote aparecera aqui."
+          />}
+    </Card>
+  </Page>;
+}
+
 type AuctioneerSummary = { total: number; live: number; receivedCents: string };
 
 export function isLotCancellable(
