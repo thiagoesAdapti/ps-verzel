@@ -10,6 +10,7 @@ import { authRouter } from "./modules/auth/auth.routes.ts";
 import { bidsRouter } from "./modules/bids/bids.routes.ts";
 import { catalogRouter } from "./modules/catalog/catalog.routes.ts";
 import { auctioneerRouter, lotsRouter } from "./modules/lots/lots.routes.ts";
+import { personalRouter, receiptsRouter } from "./modules/receipts/receipts.routes.ts";
 import { walletsRouter } from "./modules/wallets/wallets.routes.ts";
 
 export const app = express();
@@ -37,4 +38,6 @@ app.use("/api/catalog", catalogRouter);
 app.use("/api/lots", lotsRouter);
 app.use("/api/auctioneer", auctioneerRouter);
 app.use("/api/wallet", walletsRouter);
+app.use("/api/my", personalRouter);
+app.use("/api/receipts", receiptsRouter);
 app.use(notFound, errorMiddleware);
