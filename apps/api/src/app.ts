@@ -7,6 +7,7 @@ import { optionalAuth } from "./middlewares/auth.middleware.ts";
 import { errorMiddleware, notFound, requestContext } from "./middlewares/error.middleware.ts";
 import { requireOrigin } from "./middlewares/origin.middleware.ts";
 import { authRouter } from "./modules/auth/auth.routes.ts";
+import { bidsRouter } from "./modules/bids/bids.routes.ts";
 import { catalogRouter } from "./modules/catalog/catalog.routes.ts";
 import { auctioneerRouter, lotsRouter } from "./modules/lots/lots.routes.ts";
 import { walletsRouter } from "./modules/wallets/wallets.routes.ts";
@@ -31,6 +32,7 @@ app.get("/api/covers/:filename", (req, res, next) => {
   }
 });
 app.use("/api/auth", authRouter);
+app.use("/api/lots/:id/bids", bidsRouter);
 app.use("/api/catalog", catalogRouter);
 app.use("/api/lots", lotsRouter);
 app.use("/api/auctioneer", auctioneerRouter);
