@@ -1,4 +1,4 @@
-import { BookOpen, Check, Search, ShieldCheck } from "lucide-react";
+import { BookOpen, Check, Copy, Search, ShieldCheck } from "lucide-react";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { Page } from "../app/app-layout.tsx";
@@ -559,6 +559,79 @@ export function MyAuctionsPage() {
           />}
     </Card>
   </Page>;
+}
+
+type Receipt = {
+  token: string;
+  lotId: string;
+  title: string;
+  authors: string[];
+  coverUrl: string | null;
+  finalAmountCents: string;
+  winner: string;
+  settledAt: string;
+  result: string;
+};
+
+export function ReceiptPage() {
+  const { token = "" } = useParams();
+  const { showToast } = useToast();
+  const receipt = useData(() => api<Receipt>(`/receipts/${token}`), [token]);
+  const [copied, setCopied] = useState(false);
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(location.href);
+      setCopied(true);
+      showToast({
+        kind: "success",
+        title: "Link copiado",
+        message: "O link do comprovante esta na area de transferencia."
+      });
+    } catch (caught) {
+      showToast({
+        kind: "error",
+        title: "Nao foi possivel copiar o link",
+        message: errorMessage(caught)
+      });
+    }
+  };
+  if (receipt.error) {
+    return <Page title="Comprovante de arremate">
+      <ErrorState message={receipt.error} retry={receipt.refresh} />
+    </Page>;
+  }
+  if (!receipt.data) return <LoadingState />;
+  const item = receipt.data;
+  return <div className="page receipt-page">
+    <Card className="receipt">
+      <div className="receipt-head">
+        <span className="eyebrow">Comprovante de arrematacao</span>
+        <h1>Lote arrematado</h1>
+        <p>Registro publico da arrematacao, sem dados pessoais do vencedor.</p>
+      </div>
+      <div className="receipt-book">
+        <div className="receipt-book-copy">
+          <span className="eyebrow">Lote {item.lotId.slice(0, 8)}</span>
+          <h2>{item.title}</h2>
+          <p>{item.authors.join(", ")}</p>
+        </div>
+        <BookCover src={item.coverUrl} title={item.title} />
+      </div>
+      <div className="receipt-grid">
+        <div><span>Comprovante</span><strong>{item.token.slice(0, 12).toUpperCase()}</strong></div>
+        <div><span>Resultado</span><strong>Arrematado</strong></div>
+        <div><span>Vencedor publico</span><strong>{item.winner}</strong></div>
+        <div><span>Encerramento</span><strong>{formatAuctionDateTime(item.settledAt)}</strong></div>
+      </div>
+      <div className="receipt-total">
+        <span>Valor final do arremate</span>
+        <MoneyDisplay large value={item.finalAmountCents} />
+      </div>
+      <Button onClick={() => void copyLink()}>
+        <Copy size={17} /> {copied ? "Link copiado" : "Copiar link do comprovante"}
+      </Button>
+    </Card>
+  </div>;
 }
 
 type AuctioneerSummary = { total: number; live: number; receivedCents: string };
