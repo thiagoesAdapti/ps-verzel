@@ -2,7 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./app/app-layout.tsx";
 import { useAuth, type User } from "./app/auth-provider.tsx";
 import { LoadingState } from "./components/ui/index.tsx";
-import { LoginPage, RegisterPage } from "./features/pages.tsx";
+import { HomePage, LoginPage, RegisterPage } from "./features/pages.tsx";
 
 function PendingScreen({ title }: { title: string }) {
   return (
@@ -24,7 +24,7 @@ export function App() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route path="/" element={<PendingScreen title="Vitrine de leiloes" />} />
+        <Route path="/" element={<HomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/lots/:id" element={<PendingScreen title="Sala de leilao" />} />
